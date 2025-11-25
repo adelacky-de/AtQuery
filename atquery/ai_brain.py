@@ -52,16 +52,41 @@ RULES:
 7. DO NOT use markdown blocks (```python). Just write the code directly.
 8. Only use standard PyQGIS modules (e.g., QgsProject, QgsVectorLayer, QgsMessageLog). The 'iface' variable is available.
 
-Example 1 (Selection):
-layer = QgsProject.instance().mapLayersByName('MyLayer')[0]
-layer.selectByExpression('"AREA_CODE" = \'STH\'')
-print(f"Selected {layer.selectedFeatureCount()} features.")
+Example 1 (Selection - Simple String Match):
+User: Select all buildings named 'City Hall' in the 'Buildings' layer.
+AI Action: Call select_features tool with layer_name='Buildings' and sql='"Name" = \'City Hall\''.
 
-Example 2 (Counting):
-layer = QgsProject.instance().mapLayersByName('MyLayer')[0]
-print(layer.featureCount())
+Example 2 (Selection - Numeric Comparison):
+User: Find all parcels with an area greater than 1000 square meters in 'Parcels'.
+AI Action: Call select_features tool with layer_name='Parcels' and sql='"Area" > 1000'.
 
-Example 3 (Selection with partial layer name and specific condition):
+Example 3 (Selection - Partial String Match with LIKE):
+User: Select roads that contain 'Main' in their name from the 'Roads' layer.
+AI Action: Call select_features tool with layer_name='Roads' and sql='"RoadName" LIKE \'%Main%\''.
+
+Example 4 (Selection - Multiple Conditions with AND):
+User: Select all houses built before 1990 with more than 3 bedrooms in 'Housing'.
+AI Action: Call select_features tool with layer_name='Housing' and sql='"YearBuilt" < 1990 AND "Bedrooms" > 3'.
+
+Example 5 (Selection - Multiple Conditions with OR):
+User: Find all schools or hospitals in the 'POIs' layer.
+AI Action: Call select_features tool with layer_name='POIs' and sql='"Type" = \'School\' OR "Type" = \'Hospital\''.
+
+Example 6 (Selection - Using IN operator):
+User: Select features in 'Countries' where 'Continent' is 'Europe' or 'Asia'.
+AI Action: Call select_features tool with layer_name='Countries' and sql='"Continent" IN (\'Europe\', \'Asia\')'.
+
+Example 7 (Counting - Total Features):
+User: How many features are in the 'Rivers' layer?
+AI Action: Call select_features tool with layer_name='Rivers' and sql='1=1' (or similar always true expression) then print the feature count.
+(Note: The AI should generate PyQGIS code to count features, not just return a number directly)
+
+Example 8 (Counting - Selected Features):
+User: Count the currently selected features in 'Buildings'.
+AI Action: Call select_features tool with layer_name='Buildings' and sql='1=1' (or similar always true expression) then print the selected feature count.
+(Note: The AI should generate PyQGIS code to count selected features, not just return a number directly)
+
+Example 9 (Selection with partial layer name and specific condition):
 User: Select features in AdminArea where NAME_EN = Southern District
 AI Action: Call select_features tool with layer_name='AdminArea_DCD_20230609.gdb_converted' and sql='"NAME_EN" = \'Southern District\''.
 """
