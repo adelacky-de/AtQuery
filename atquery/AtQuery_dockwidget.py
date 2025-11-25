@@ -372,10 +372,11 @@ class AtQueryDockWidget(QtWidgets.QDockWidget):
             tool_call = data['message']['tool_calls'][0]
             tool_call_json = json.dumps(tool_call)
             return data['message']['content'] if 'content' in data['message'] else "", tool_call_json
-        
-        # Standard text/code response
-        QgsMessageLog.logMessage(f"AtQuery Debug: No tool calls detected in Ollama response.", "AtQuery", 0)
-        return data['message']['content'], None
+        else:
+            # If no tool calls, it's an unexpected conversational response.
+            # Log it as an error and return empty to force the AI to generate a tool call next turn.
+            QgsMessageLog.logMessage(f"AtQuery Error: AI did not generate a tool call. Raw response: {data['message'].get('content', 'No content')}", "AtQuery", 2)
+            return data['message'].get('content', 'No content'), None # Return content for debugging, but no tool call
 
     def handle_ai_response(self, response_text):
         """Displays the final AI answer with nice SQL code formatting."""
