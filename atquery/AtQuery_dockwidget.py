@@ -214,21 +214,21 @@ class AtQueryDockWidget(QtWidgets.QDockWidget):
         try:
             # PHASE 1: Force tool call (AI asks for layer list)
             response_text, tool_call_json = self._get_ai_response(user_text)
-            QgsMessageLog.logMessage(f"AtQuery Debug: Phase 1 - response_text: {response_text}, tool_call_json: {tool_call_json}", "AtQuery", QgsMessageLog.MessageLevel.INFO)
+            QgsMessageLog.logMessage(f"AtQuery Debug: Phase 1 - response_text: {response_text}, tool_call_json: {tool_call_json}", "AtQuery", QgsMessageLog.MessageLevel.Info)
 
             if tool_call_json:
                 # Execute tool silently — no output to user
                 tool_output = self.handle_tool_call(tool_call_json)
-                QgsMessageLog.logMessage(f"AtQuery Debug: Phase 1 - tool_output: {tool_output}", "AtQuery", QgsMessageLog.MessageLevel.INFO)
+                QgsMessageLog.logMessage(f"AtQuery Debug: Phase 1 - tool_output: {tool_output}", "AtQuery", QgsMessageLog.MessageLevel.Info)
 
                 # PHASE 2: Send real data back → AI gives beautiful final answer
                 response_text, final_tool_call_json = self._get_ai_response(user_text, tool_output)
-                QgsMessageLog.logMessage(f"AtQuery Debug: Phase 2 - response_text: {response_text}, final_tool_call_json: {final_tool_call_json}", "AtQuery", QgsMessageLog.MessageLevel.INFO)
+                QgsMessageLog.logMessage(f"AtQuery Debug: Phase 2 - response_text: {response_text}, final_tool_call_json: {final_tool_call_json}", "AtQuery", QgsMessageLog.MessageLevel.Info)
 
                 if final_tool_call_json:
                     # If AI still returns a tool call in Phase 2, execute it
                     final_tool_output = self.handle_tool_call(final_tool_call_json)
-                    QgsMessageLog.logMessage(f"AtQuery Debug: Phase 2 - final_tool_output: {final_tool_output}", "AtQuery", QgsMessageLog.MessageLevel.INFO)
+                    QgsMessageLog.logMessage(f"AtQuery Debug: Phase 2 - final_tool_output: {final_tool_output}", "AtQuery", QgsMessageLog.MessageLevel.Info)
                     # The final display should reflect the outcome of this tool call, not just the response_text
                     # For now, we'll just display the response_text, but this might need refinement
                     self.handle_ai_response(response_text)
@@ -240,7 +240,7 @@ class AtQueryDockWidget(QtWidgets.QDockWidget):
 
         except Exception as e:
             self.chat_display.append(f"<br>Error: Could not reach Ollama. Is it running?")
-            QgsMessageLog.logMessage(f"AtQuery Error: {traceback.format_exc()}", "AtQuery", QgsMessageLog.MessageLevel.CRITICAL)
+            QgsMessageLog.logMessage(f"AtQuery Error: {traceback.format_exc()}", "AtQuery", QgsMessageLog.MessageLevel.Critical)
 
         finally:
             self.user_input.setPlaceholderText("Ask anything about your project...")
@@ -357,25 +357,24 @@ class AtQueryDockWidget(QtWidgets.QDockWidget):
         }
         
         print(f"Ollama API Request Payload: {json.dumps(payload, indent=2)}")
-        QgsMessageLog.MessageLevel.INFO
         
         headers = {'Content-Type': 'application/json'}
         response = requests.post('http://localhost:11434/api/chat', headers=headers, json=payload)
         response.raise_for_status() # Raises an exception for bad status codes
         
         data = response.json()
-        QgsMessageLog.logMessage(f"AtQuery Debug: Ollama Raw Response: {json.dumps(data, indent=2)}", "AtQuery", QgsMessageLog.MessageLevel.INFO)
+        QgsMessageLog.logMessage(f"AtQuery Debug: Ollama Raw Response: {json.dumps(data, indent=2)}", "AtQuery", QgsMessageLog.MessageLevel.Info)
         
         # Check for tool call
         if 'tool_calls' in data['message']:
-            QgsMessageLog.logMessage(f"AtQuery Debug: Tool calls detected in Ollama response.", "AtQuery", QgsMessageLog.MessageLevel.INFO)
+            QgsMessageLog.logMessage(f"AtQuery Debug: Tool calls detected in Ollama response.", "AtQuery", QgsMessageLog.MessageLevel.Info)
             # Ollama returns a list of tool calls. We only support one for now.
             tool_call = data['message']['tool_calls'][0]
             tool_call_json = json.dumps(tool_call)
             return data['message']['content'] if 'content' in data['message'] else "", tool_call_json
         
         # Standard text/code response
-        QgsMessageLog.logMessage(f"AtQuery Debug: No tool calls detected in Ollama response.", "AtQuery", QgsMessageLog.MessageLevel.INFO)
+        QgsMessageLog.logMessage(f"AtQuery Debug: No tool calls detected in Ollama response.", "AtQuery", QgsMessageLog.MessageLevel.Info)
         return data['message']['content'], None
 
     def handle_ai_response(self, response_text):
@@ -441,7 +440,7 @@ class AtQueryDockWidget(QtWidgets.QDockWidget):
                 
             except Exception as e:
                 self.chat_display.append(f"\n❌ [EXECUTION ERROR] {type(e).__name__}: {str(e)}")
-                QgsMessageLog.logMessage(f"PyQGIS Execution Error: {traceback.format_exc()}", 'AtQuery', QgsMessageLog.MessageLevel.CRITICAL)
+                QgsMessageLog.logMessage(f"PyQGIS Execution Error: {traceback.format_exc()}", 'AtQuery', QgsMessageLog.MessageLevel.Critical)
 
     def closeEvent(self, event):
         """Handles the close event to emit a signal."""
