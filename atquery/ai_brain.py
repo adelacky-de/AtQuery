@@ -60,6 +60,10 @@ print(f"Selected {layer.selectedFeatureCount()} features.")
 Example 2 (Counting):
 layer = QgsProject.instance().mapLayersByName('MyLayer')[0]
 print(layer.featureCount())
+
+Example 3 (Selection with partial layer name and specific condition):
+User: Select features in AdminArea where NAME_EN = Southern District
+AI Action: Call select_features tool with layer_name='AdminArea_DCD_20230609.gdb_converted' and sql='"NAME_EN" = \'Southern District\''.
 """
 
 def get_tools():
