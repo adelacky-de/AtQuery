@@ -5,6 +5,8 @@ import json
 import traceback
 import os
 import tempfile
+import ast
+import re
 
 from qgis.PyQt import QtWidgets, QtCore
 from qgis.PyQt.QtCore import QEvent
@@ -13,7 +15,9 @@ from qgis.PyQt.QtCore import QEvent
 from qgis.core import (
     QgsProject,
     QgsMessageLog,
-    QgsFeatureRequest   # ← Only this one is needed for filtering
+    QgsFeatureRequest,
+    Qgis,
+    QgsExpression
 )
 
 from .installer_utils import (
@@ -55,6 +59,7 @@ class AtQueryDockWidget(QtWidgets.QDockWidget):
         self.setWindowTitle("AtQuery AI Agent")
         self.iface = None 
         self.download_thread = None
+        self.conversation_history = []
         
         # 1. Main Widget and Stacked Layout (for different states)
         self.main_widget = QtWidgets.QWidget()
@@ -73,6 +78,8 @@ class AtQueryDockWidget(QtWidgets.QDockWidget):
     def set_iface(self, iface):
         """Allows the main plugin class to pass the QGIS interface."""
         self.iface = iface
+        # Start the conversation with the system prompt
+        self.conversation_history = [{"role": "system", "content": get_system_prompt()}]
         
     def _setup_ollama_status_view(self):
         """Creates the view displayed when Ollama is not running."""
@@ -199,7 +206,7 @@ class AtQueryDockWidget(QtWidgets.QDockWidget):
             
     # --- Chat Logic ---
     def _send_query(self):
-        """Processes the user's query — clean UI, no debug spam."""
+        """Adds user query to history and starts the AI conversation loop."""
         user_text = self.user_input.text().strip()
         if not user_text:
             return
@@ -211,203 +218,449 @@ class AtQueryDockWidget(QtWidgets.QDockWidget):
         self.send_button.setEnabled(False)
         QtCore.QCoreApplication.processEvents()
 
+        # Add user message to history
+        self.conversation_history.append({"role": "user", "content": user_text})
+        
+        # Start the conversation loop
+        self._run_ai_conversation()
+
+    def _run_ai_conversation(self):
+        """
+        Manages the multi-step conversation with the AI.
+        It sends the history, gets a response, executes tools, and continues
+        until the AI provides a final answer for the user.
+        """
         try:
-            # PHASE 1: Force tool call (AI asks for layer list)
-            response_text, tool_call_json = self._get_ai_response(user_text)
+            while True:
+                # Get AI response based on the current conversation history
+                ai_message, tool_calls = self._get_ai_response(self.conversation_history)
 
-            if tool_call_json:
-                # Execute tool silently — no output to user
-                tool_output = self.handle_tool_call(tool_call_json)
+                # If the AI calls a tool, execute it (even if it also returned text).
+                if tool_calls:
+                    QgsMessageLog.logMessage(f"Executing {len(tool_calls)} tool call(s)", "AtQuery", Qgis.Info)
+                    if ai_message:
+                        self.chat_display.append(f"<br><b>AtQuery (thinking):</b> {ai_message}")
+                        self.conversation_history.append({"role": "assistant", "content": ai_message})
 
-                # PHASE 2: Send real data back → AI gives beautiful final answer
-                response_text, _ = self._get_ai_response(user_text, tool_output)
-            # else: direct answer (rare)
+                    # Record the serialized tool call for context
+                    self.conversation_history.append({
+                        "role": "assistant",
+                        "content": json.dumps(tool_calls)
+                    })
+                    
+                    for tool_call in tool_calls:
+                        QgsMessageLog.logMessage(f"Tool call: {tool_call.get('function', {}).get('name', 'unknown')}", "AtQuery", Qgis.Info)
+                        result_data = self.handle_tool_call(tool_call)
+                        QgsMessageLog.logMessage(f"Tool result: {json.dumps(result_data)}", "AtQuery", Qgis.Info)
+                        self._display_tool_result(result_data) 
+                        self.conversation_history.append({
+                            "role": "tool",
+                            "content": json.dumps(result_data)
+                        })
+                        if tool_call['function']['name'] in ('get_layer_list', 'get_layer_fields'):
+                            return
 
-            # Show only the final clean answer
-            self.handle_ai_response(response_text)
+                    # After executing tools, continue the loop to let the AI respond with the final message
+                    continue
+
+                # If no tool call, any AI message is the final response.
+                if ai_message:
+                    self.chat_display.append(f"<br><b>AtQuery:</b> {ai_message}")
+                    self.conversation_history.append({"role": "assistant", "content": ai_message})
+                    break # End of conversation turn
+
+                else:
+                    # If the AI returns neither a message nor a tool call, it's an unexpected state.
+                    self.chat_display.append("<br><b>AtQuery:</b> I'm not sure how to proceed. Please try again.")
+                    break
 
         except Exception as e:
+            error_message = f"AtQuery Error: {traceback.format_exc()}"
             self.chat_display.append(f"<br>Error: Could not reach Ollama. Is it running?")
-            QgsMessageLog.logMessage(f"AtQuery Error: {traceback.format_exc()}", "AtQuery", QgsMessageLog.CRITICAL)
+            QgsMessageLog.logMessage(error_message, "AtQuery", Qgis.Critical)
 
         finally:
+            # Re-enable user input
             self.user_input.setPlaceholderText("Ask anything about your project...")
             self.user_input.setEnabled(True)
             self.send_button.setEnabled(True)
 
-    def handle_tool_call(self, tool_call_json):
+    def handle_tool_call(self, tool_call):
+        """Executes a single tool call and returns a structured dictionary."""
         try:
-            call = json.loads(tool_call_json)
-            name = call['function']['name']
-            args = call['function'].get('arguments', {})
+            name = tool_call['function']['name']
+            args = tool_call['function'].get('arguments', {})
 
             if name == 'get_layer_list':
                 layers = QgsProject.instance().mapLayers().values()
-                return json.dumps({"layers": [l.name() for l in layers]})
+                return {"action": "get_layer_list", "layers": [l.name() for l in layers]}
+
+            elif name == 'get_layer_fields':
+                layer_name = args.get('layer_name')
+                layer = next((l for l in QgsProject.instance().mapLayers().values() if l.name() == layer_name), None)
+                if not layer:
+                    return {"error": f"Layer '{layer_name}' not found."}
+                
+                fields = [field.name() for field in layer.fields()]
+                return {"action": "get_layer_fields", "layer": layer_name, "fields": fields}
 
             elif name in ('query_layer', 'select_features'):
                 layer_name = args.get('layer_name')
-                sql = args.get('sql', '').strip()
+                raw_sql = args.get('sql')
+                QgsMessageLog.logMessage(
+                    f"AI tool call '{name}' with raw args: {args}",
+                    "AtQuery",
+                    Qgis.Info
+                )
+                sql = self._sanitize_sql(raw_sql)
+
+                if not layer_name or not sql:
+                    return {"error": "Both 'layer_name' and 'sql' are required for this tool."}
 
                 layer = next((l for l in QgsProject.instance().mapLayers().values() if l.name() == layer_name), None)
                 if not layer:
-                    return json.dumps({"error": "Layer not found"})
+                    return {"error": f"Layer '{layer_name}' not found."}
 
-                # === BUILD A BULLETPROOF EXPRESSION ===
-                # If user gave full SQL like "AREA_CODE = 'STH'", extract the condition
-                condition = sql
-                if sql.upper().startswith("SELECT"):
-                    # Extract everything after WHERE
-                    if "WHERE" in sql.upper():
-                        condition = sql.split("WHERE", 1)[1].strip()
-                # If just a condition like "AREA_CODE = 'STH'"
-                # → Quote field name properly
-                if '=' in condition and not condition.strip().startswith('"'):
-                    field, value = [part.strip() for part in condition.split('=', 1)]
-                    if not field.startswith('"'):
-                        field = f'"{field}"'
-                    condition = f'{field} = {value}'
-
-                # Final safe expression
-                expr = QgsExpression(condition)
+                expr = QgsExpression(sql)
                 if expr.hasParserError():
-                    return json.dumps({"error": f"Invalid expression: {expr.parserErrorString()}"})
+                    return {
+                        "error": f"Invalid query syntax: {expr.parserErrorString()}",
+                        "sql": sql
+                    }
 
-                request = QgsFeatureRequest(expr)
-                features = list(layer.getFeatures(request))
-                count = len(features)
+                # Count matching features safely (featureCount does not accept requests directly)
+                if sql:
+                    request = QgsFeatureRequest(expr)
+                    count = sum(1 for _ in layer.getFeatures(request))
+                else:
+                    count = layer.featureCount()
 
-                # Select + zoom if requested
+
+                action_verb = "Found"
                 if name == 'select_features':
-                    layer.selectByIds([f.id() for f in features])
+                    layer.selectByExpression(sql)
                     if count > 0:
                         self.iface.mapCanvas().zoomToSelected(layer)
-                    action = "Selected and zoomed to"
-                else:
-                    action = "Found"
+                    action_verb = "Selected"
 
-                return json.dumps({
+                return {
+                    "action": name,
                     "layer": layer_name,
-                    "sql": condition,
+                    "sql": sql,
                     "count": count,
-                    "action": action
-                })
+                    "action_verb": action_verb
+                }
             
-        except Exception as e:
-            return json.dumps({"error": str(e)})
-        
-    def _get_ai_response(self, prompt, tool_output=None):
-        """
-        Sends the request to the local Ollama server.
-        Returns (response_text, tool_call_json).
-        """
-        model = "llama3.2:3b-instruct-q4_K_M" # Assuming this model is downloaded
-        
-        # Build the message history for the LLM
-        messages = [
-            {"role": "user", "content": prompt}
-        ]
-        
-        # If we have tool output from a previous step, include it
-        if tool_output is not None:
-             messages.append({
-                 "role": "tool",
-                 "content": tool_output
-             })
+            return {"error": f"Unknown tool: {name}"}
 
-        # Tool calls are specified in the payload to enable function calling
+        except Exception as e:
+            return {"error": str(e)}
+
+    def _display_tool_result(self, result_data):
+        """Formats and displays the result of a tool call to the user."""
+        if "error" in result_data:
+            message = f"An error occurred: {result_data['error']}"
+        elif result_data.get("action") == "get_layer_list":
+            layers = result_data.get('layers', [])
+            if layers:
+                layer_list = "<br>- ".join(layers)
+                message = f"Available layers:<br>- {layer_list}"
+            else:
+                message = "No layers found in the project."
+        elif result_data.get("action") == "get_layer_fields":
+            fields = result_data.get('fields', [])
+            layer_name = result_data.get('layer', 'the layer')
+            if fields:
+                field_list = "<br>- ".join(fields)
+                message = f"Fields in '{layer_name}':<br>- {field_list}"
+            else:
+                message = f"No fields found in '{layer_name}'."
+        elif result_data.get("action") in ("query_layer", "select_features"):
+            count = result_data.get('count', 0)
+            layer = result_data.get('layer', 'the layer')
+            action_verb = result_data.get('action_verb', 'Processed')
+            feature_word = "feature" if count == 1 else "features"
+            message = f"✅ {action_verb} {count} {feature_word} in '{layer}'."
+        else:
+            # Generic message for unhandled tool outputs
+            message = f"Completed: {result_data.get('action', 'unspecified action')}."
+
+        self.chat_display.append(f"<br><b>AtQuery:</b> {message}")
+
+    def _sanitize_sql(self, sql_value):
+        """
+        Attempts to convert imperfect SQL strings (e.g., ["FIELD", "value"]) into valid expressions.
+        Returns a cleaned string or an empty string if nothing useful could be derived.
+        """
+        sql = (sql_value or "").strip()
+        if not sql:
+            return ""
+
+        # First, unescape any escaped quotes (handle \' and \")
+        sql = sql.replace("\\'", "'").replace('\\"', '"')
+
+        # Normalize fancy unicode quotes into standard ASCII equivalents
+        # Using replace() instead of translate() to avoid encoding issues
+        sql = sql.replace(""", '"').replace(""", '"')
+        sql = sql.replace("„", '"').replace("‟", '"')
+        sql = sql.replace("'", "'").replace("'", "'").replace("‛", "'")
+
+        # Check if SQL is already in correct format (field in double quotes, value in single quotes)
+        if self._is_already_valid_sql(sql):
+            return sql
+
+        # Collapse doubled double-quotes that come from JSON escaping (""FIELD"")
+        sql = self._collapse_double_quotes(sql)
+        
+        # Try to normalize basic equals expressions
+        normalized = self._normalize_basic_equals(sql)
+        if normalized:
+            return normalized
+
+        # Try parsing as Python literal (list/tuple)
+        literal_candidate = self._try_literal_sql(sql)
+        if literal_candidate:
+            return literal_candidate
+
+        # Try inferring missing operator
+        inferred = self._infer_missing_operator(sql)
+        if inferred:
+            return inferred
+
+        # If all else fails, return the original (might already be valid)
+        return sql
+
+    def _try_literal_sql(self, sql):
+        """Parses python-style literals like ["FIELD", "value"] into `"FIELD" = 'value'`."""
+        if not sql.startswith(("[", "(")):
+            return ""
+
+        try:
+            literal = ast.literal_eval(sql)
+        except Exception:
+            return ""
+
+        if isinstance(literal, (list, tuple)):
+            if len(literal) == 2:
+                field, value = literal
+                operator = "="
+            elif len(literal) == 3:
+                field, operator, value = literal
+                operator = operator or "="
+            else:
+                return ""
+
+            if not isinstance(field, str):
+                return ""
+
+            field_expr = field if field.startswith('"') and field.endswith('"') else f"\"{field}\""
+
+            if isinstance(value, str):
+                clean_value = value.strip()
+                if clean_value.startswith("'") and clean_value.endswith("'"):
+                    clean_value = clean_value[1:-1]
+                clean_value = clean_value.replace("'", "''")
+                value_expr = f"'{clean_value}'"
+            else:
+                value_expr = str(value)
+
+            op = str(operator).strip() or "="
+            return f"{field_expr} {op} {value_expr}"
+
+        return ""
+
+    def _infer_missing_operator(self, sql):
+        """
+        Handles cases like `"NAME_EN" 'Southern District'` by inserting '=' between field and value.
+        """
+        if '"' in sql and "'" in sql and "=" not in sql:
+            try:
+                field_part, rest = sql.split('"', 2)[1:]
+                value_part = rest.split("'", 2)[1]
+                return f"\"{field_part}\" = '{value_part}'"
+            except ValueError:
+                return ""
+        return ""
+
+    def _is_already_valid_sql(self, sql):
+        """
+        Checks if SQL is already in valid QGIS format: "FIELD" = 'value' or similar.
+        Returns True if it looks valid, False otherwise.
+        """
+        # Quick check: if it has a field in double quotes and a value in single quotes, it's likely valid
+        if '"' in sql and "'" in sql and "=" in sql:
+            # Try to parse it as a QgsExpression to see if it's valid
+            try:
+                expr = QgsExpression(sql)
+                if not expr.hasParserError():
+                    return True
+            except Exception:
+                pass
+        return False
+
+    def _collapse_double_quotes(self, sql):
+        """Reduces runs of repeated double quotes to a single double quote."""
+        return re.sub(r'"{2,}', '"', sql)
+
+    def _normalize_basic_equals(self, sql):
+        """
+        For simple expressions that only contain '=', ensures fields use double quotes
+        and string literals use single quotes.
+        Returns None if normalization fails (so caller can try other methods).
+        """
+        if "=" not in sql:
+            return None
+
+        try:
+            left, right = sql.split("=", 1)
+            normalized_field = self._normalize_field_name(left)
+            normalized_value = self._normalize_value_literal(right)
+
+            if not normalized_field or not normalized_value:
+                return None
+
+            return f"{normalized_field} = {normalized_value}"
+        except Exception:
+            return None
+
+    def _normalize_field_name(self, raw_field):
+        field = raw_field.strip()
+        while len(field) >= 2 and field[0] in ("'", '"') and field[-1] == field[0]:
+            field = field[1:-1].strip()
+
+        if not field:
+            return ""
+
+        return f"\"{field}\""
+
+    def _normalize_value_literal(self, raw_value):
+        value = raw_value.strip()
+        if not value:
+            return ""
+
+        # Remove outer quotes (both single and double) iteratively
+        while len(value) >= 2:
+            if value[0] == value[-1] and value[0] in ("'", '"'):
+                value = value[1:-1].strip()
+            else:
+                break
+
+        if not value:
+            return ""
+
+        # If the value is numeric, keep as-is
+        try:
+            float(value)
+            return value
+        except ValueError:
+            pass
+
+        # Escape single quotes by doubling them (QGIS SQL standard)
+        clean_value = value.replace("'", "''")
+        return f"'{clean_value}'"
+    
+    def _try_parse_tool_call_from_text(self, text):
+        """
+        Attempts to extract a tool call from text that looks like JSON.
+        Returns a tool_call dict if found, None otherwise.
+        """
+        text = text.strip()
+        
+        # Try to find JSON object in the text - handle nested objects
+        import re
+        # First, try to parse the entire text as JSON
+        try:
+            parsed = json.loads(text)
+            if isinstance(parsed, dict) and "name" in parsed and "parameters" in parsed:
+                return {
+                    "function": {
+                        "name": parsed["name"],
+                        "arguments": parsed["parameters"]
+                    }
+                }
+        except json.JSONDecodeError:
+            pass
+        
+        # If that fails, try to extract JSON from within the text
+        # Look for pattern: {"name": "...", "parameters": {...}}
+        # Use a more robust approach: find the opening brace and try to parse balanced braces
+        brace_start = text.find('{')
+        if brace_start >= 0:
+            brace_count = 0
+            in_string = False
+            escape_next = False
+            
+            for i in range(brace_start, len(text)):
+                char = text[i]
+                
+                if escape_next:
+                    escape_next = False
+                    continue
+                
+                if char == '\\':
+                    escape_next = True
+                    continue
+                
+                if char == '"' and not escape_next:
+                    in_string = not in_string
+                    continue
+                
+                if not in_string:
+                    if char == '{':
+                        brace_count += 1
+                    elif char == '}':
+                        brace_count -= 1
+                        if brace_count == 0:
+                            # Found balanced braces
+                            json_str = text[brace_start:i+1]
+                            try:
+                                parsed = json.loads(json_str)
+                                if isinstance(parsed, dict) and "name" in parsed and "parameters" in parsed:
+                                    return {
+                                        "function": {
+                                            "name": parsed["name"],
+                                            "arguments": parsed["parameters"]
+                                        }
+                                    }
+                            except json.JSONDecodeError as e:
+                                QgsMessageLog.logMessage(f"JSON parse error: {str(e)} for: {json_str[:100]}", "AtQuery", Qgis.Warning)
+                            break
+        
+        return None
+        
+    def _get_ai_response(self, messages):
+        """
+        Sends the conversation history to the local Ollama server.
+        Returns (ai_message_for_user, list_of_tool_calls).
+        """
+        model = "llama3.2:3b-instruct-q4_K_M" 
+        
         payload = {
             "model": model,
             "messages": messages,
-            "system": get_system_prompt(),
             "tools": get_tools(),
-            "stream": False # We need the full response at once
+            "stream": False
         }
-        
-        print(f"Ollama API Request Payload: {json.dumps(payload, indent=2)}")
         
         headers = {'Content-Type': 'application/json'}
         response = requests.post('http://localhost:11434/api/chat', headers=headers, json=payload)
-        response.raise_for_status() # Raises an exception for bad status codes
+        response.raise_for_status()
         
         data = response.json()
+        ai_response_message = data.get('message', {})
         
-        # Check for tool call
-        if 'tool_calls' in data['message']:
-            # Ollama returns a list of tool calls. We only support one for now.
-            tool_call = data['message']['tool_calls'][0]
-            tool_call_json = json.dumps(tool_call)
-            return data['message']['content'] if 'content' in data['message'] else "", tool_call_json
+        # Extract text content and tool calls from the AI's response
+        ai_message_for_user = ai_response_message.get('content', '')
+        tool_calls = ai_response_message.get('tool_calls', [])
         
-        # Standard text/code response
-        return data['message']['content'], None
-
-    def handle_ai_response(self, response_text):
-        """Displays the final AI answer with nice SQL code formatting."""
-        if not response_text.strip():
-            self.chat_display.append("<br><b>AtQuery:</b> No result.")
-            return
-
-        # Convert markdown ```sql ... ``` into styled HTML block
-        lines = response_text.split('\n')
-        formatted = response_text
-
-        # Replace ```sql ... ``` with styled <pre> block
-        in_code_block = False
-        lines = formatted.split('\n')
-        output_lines = []
-
-        for line in lines:
-            if line.strip().startswith('```sql'):
-                output_lines.append('<pre style="background:#f4f4f4; padding:12px; border-radius:8px; font-family:Consolas,monospace; margin:10px 0;">')
-                in_code_block = True
-            elif line.strip() == '```':
-                output_lines.append('</pre>')
-                in_code_block = False
-            elif in_code_block:
-                output_lines.append(line)
+        # Fallback: If no tool_calls but the message contains JSON that looks like a tool call, parse it
+        if not tool_calls and ai_message_for_user:
+            parsed_tool_call = self._try_parse_tool_call_from_text(ai_message_for_user)
+            if parsed_tool_call:
+                QgsMessageLog.logMessage(f"Extracted tool call from text: {json.dumps(parsed_tool_call)}", "AtQuery", Qgis.Info)
+                tool_calls = [parsed_tool_call]
+                ai_message_for_user = ""  # Clear the message since we're using the tool call
             else:
-                output_lines.append(line)
-
-        final_html = "<br>".join(output_lines)
-
-        # Final display
-        self.chat_display.append(f"<br><b>AtQuery:</b> {final_html}")
-
-    def execute_code(self, code_text):
-            """Runs the PyQGIS code generated by the AI safely."""
-            
-            # 1. Clean up the code (AI often wraps code in markdown)
-            clean_code = code_text.replace("```python", "").replace("```", "").strip()
-            
-            if not clean_code:
-                self.chat_display.append("❌ AI returned empty code.")
-                return
-
-            self.chat_display.append(f"\n> AI CODE:\n{clean_code}")
-            
-            # 2. Use exec() to run the code in a controlled environment
-            try:
-                # Define the execution scope: all variables and functions available to the AI code
-                # We override 'print' to redirect output back to the chat display
-                execution_scope = {
-                    'iface': self.iface,
-                    'QgsProject': QgsProject,
-                    'QgsMessageLog': QgsMessageLog,
-                    # Redirect print() function output to the chat display
-                    'print': lambda x: self.chat_display.append(f"[OUTPUT] {x}")
-                }
-                
-                exec(clean_code, execution_scope)
-                
-                # IMPORTANT: Explicit success message to confirm action
-                self.chat_display.append("\n✅ [SUCCESS: Selection/Action Executed]")
-                
-            except Exception as e:
-                self.chat_display.append(f"\n❌ [EXECUTION ERROR] {type(e).__name__}: {str(e)}")
-                QgsMessageLog.logMessage(f"PyQGIS Execution Error: {traceback.format_exc()}", 'AtQuery', QgsMessageLog.CRITICAL)
-
-    def closeEvent(self, event):
-        """Handles the close event to emit a signal."""
-        self.closingPlugin.emit()
-        super().closeEvent(event)
+                QgsMessageLog.logMessage(f"Failed to parse tool call from text: {ai_message_for_user[:200]}", "AtQuery", Qgis.Warning)
+        
+        return ai_message_for_user, tool_calls
