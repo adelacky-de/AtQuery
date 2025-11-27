@@ -13,11 +13,19 @@ from qgis.PyQt.QtCore import QEvent
 from qgis.core import (
     QgsProject,
     QgsMessageLog,
-    QgsFeatureRequest   # ← Only this one is needed for filtering
+    QgsFeatureRequest,   # ← Only this one is needed for filtering
+    QgsVectorLayer,      # For creating new layers
+    QgsGeometry,         # For spatial operations
+    QgsRectangle,        # For bounding boxes
+    QgsFeature,          # For creating features
+    QgsField,            # For layer fields
+    QgsFields            # For field collections
 )
+import processing # Import processing separately as it's not directly in qgis.core
 
 from .installer_utils import (
     check_ollama_api,
+    check_ollama_model_availability,
     get_os_info,
     get_installer_url,
     download_installer,
@@ -54,7 +62,9 @@ class AtQueryDockWidget(QtWidgets.QDockWidget):
         super().__init__(parent)
         self.setWindowTitle("AtQuery AI Agent")
         self.iface = None 
-        self.download_thread = None
+        self.ollama_url = 'http://localhost:11434/api/chat'
+        self.model_name = "llama3.2:3b-instruct-q4_K_M" # Reverted to user's preferred model
+        self.conversation_history = []
         
         # 1. Main Widget and Stacked Layout (for different states)
         self.main_widget = QtWidgets.QWidget()
@@ -139,15 +149,27 @@ class AtQueryDockWidget(QtWidgets.QDockWidget):
 
     # --- Ollama Handling ---
     def check_ollama_status(self):
-        """Tries to connect to the Ollama API."""
-        if check_ollama_api():
+        """Tries to connect to the Ollama API and checks for the required model."""
+        if not check_ollama_api():
+            self.layout_stack.setCurrentIndex(0) # Switch to setup view
+            self.status_label.setText("Status: 🔴 Ollama API not found (http://localhost:11434).")
+            self.user_input.setEnabled(False)
+            self.send_button.setEnabled(False)
+            return
+
+        # API is running, now check for the model
+        self.chat_display.append("🟢 Ollama API Connected. Checking for model...")
+        QtCore.QCoreApplication.processEvents()
+
+        if check_ollama_model_availability(self.model_name):
             self.layout_stack.setCurrentIndex(1) # Switch to chat view
-            self.chat_display.append("<br>🟢 Ollama API Connected. Loading model...")
+            self.chat_display.append(f"🟢 Model '{self.model_name}' found. Ready.")
             self.user_input.setEnabled(True)
             self.send_button.setEnabled(True)
         else:
-            self.layout_stack.setCurrentIndex(0) # Switch to setup view
-            self.status_label.setText("Status: 🔴 Ollama API not found (http://localhost:11434).")
+            self.layout_stack.setCurrentIndex(1) # Stay on chat view to show error
+            self.chat_display.append(f"🔴 Model '{self.model_name}' not found.")
+            self.chat_display.append(f"Please run <b><code>ollama pull {self.model_name}</code></b> in your terminal and restart QGIS.")
             self.user_input.setEnabled(False)
             self.send_button.setEnabled(False)
 
@@ -199,249 +221,337 @@ class AtQueryDockWidget(QtWidgets.QDockWidget):
             
     # --- Chat Logic ---
     def _send_query(self):
-        """Processes the user's query — clean UI, no debug spam."""
+        """
+        Manages the multi-step conversation with the AI agent.
+        It sends the user prompt, handles tool calls from the AI,
+        and displays the final response.
+        """
         user_text = self.user_input.text().strip()
         if not user_text:
             return
 
         self.chat_display.append(f"<br><b>You:</b> {user_text}")
         self.user_input.clear()
-        self.user_input.setPlaceholderText("Thinking...")
+        self.user_input.setPlaceholderText("Agent is thinking...")
         self.user_input.setEnabled(False)
         self.send_button.setEnabled(False)
         QtCore.QCoreApplication.processEvents()
 
+        # Initialize the message history for this conversation turn
+        messages = [{"role": "user", "content": user_text}]
+        
         try:
-            # PHASE 1: Force tool call (AI asks for layer list)
-            response_text, tool_call_json = self._get_ai_response(user_text)
-            QgsMessageLog.logMessage(f"AtQuery Debug: Phase 1 - response_text: {response_text}, tool_call_json: {tool_call_json}", "AtQuery", 0)
+            max_steps = 5  # Prevent infinite loops
+            for step in range(max_steps):
+                QgsMessageLog.logMessage(f"AtQuery Agent: Step {step + 1}", "AtQuery", 0)
 
-            if tool_call_json:
-                # Execute tool silently — no output to user
-                tool_output = self.handle_tool_call(tool_call_json)
-                QgsMessageLog.logMessage(f"AtQuery Debug: Phase 1 - tool_output: {tool_output}", "AtQuery", 0)
+                # Get the AI's next action
+                ai_response_message = self._get_ai_response(messages)
+                messages.append(ai_response_message)
 
-                # PHASE 2: Send real data back → AI gives beautiful final answer
-                response_text, final_tool_call_json = self._get_ai_response(user_text, tool_output)
-                QgsMessageLog.logMessage(f"AtQuery Debug: Phase 2 - response_text: {response_text}, final_tool_call_json: {final_tool_call_json}", "AtQuery", 0)
+                # If there are no tool calls, it's the final answer
+                if not ai_response_message.get("tool_calls"):
+                    QgsMessageLog.logMessage("AtQuery Agent: Received final answer.", "AtQuery", 0)
+                    self.handle_ai_response(ai_response_message.get("content", ""))
+                    break
 
-                if final_tool_call_json:
-                    # If AI still returns a tool call in Phase 2, execute it
-                    final_tool_output = self.handle_tool_call(final_tool_call_json)
-                    QgsMessageLog.logMessage(f"AtQuery Debug: Phase 2 - final_tool_output: {final_tool_output}", "AtQuery", 0)
-                    # The final display should reflect the outcome of this tool call, not just the response_text
-                    # For now, we'll just display the response_text, but this might need refinement
-                    self.handle_ai_response(response_text)
-                else:
-                    # Show only the final clean answer
-                    self.handle_ai_response(response_text)
-            else: # No tool call in Phase 1, direct answer (rare)
-                self.handle_ai_response(response_text)
+                # --- If we are here, the AI wants to call a tool ---
+                QgsMessageLog.logMessage("AtQuery Agent: Handling tool calls.", "AtQuery", 0)
+                tool_calls = ai_response_message["tool_calls"]
+                
+                # Execute all tool calls and gather results
+                tool_outputs = []
+                for tool_call in tool_calls:
+                    tool_output_content = self.handle_tool_call(json.dumps(tool_call))
+                    tool_outputs.append({
+                        "role": "tool",
+                        "content": tool_output_content,
+                        "tool_call_id": tool_call.get("id") # Pass the ID back
+                    })
+                
+                # Add all tool outputs to the message history
+                messages.extend(tool_outputs)
+
+            else: # This else belongs to the for loop
+                self.handle_ai_response("The agent could not finish its task in the maximum number of steps.")
 
         except Exception as e:
-            self.chat_display.append(f"<br>Error: Could not reach Ollama. Is it running?")
-            QgsMessageLog.logMessage(f"AtQuery Error: {traceback.format_exc()}", "AtQuery", 2)
+            error_message = f"An error occurred: {str(e)}\n{traceback.format_exc()}"
+            self.chat_display.append(f"<br><b>Error:</b> {str(e)}")
+            QgsMessageLog.logMessage(error_message, "AtQuery", 2)
 
         finally:
-            self.user_input.setPlaceholderText("Ask anything about your project...")
+            self.user_input.setPlaceholderText("Enter your PyQGIS request...")
             self.user_input.setEnabled(True)
             self.send_button.setEnabled(True)
+            self.user_input.setFocus()
+
+    def _get_ai_response(self, messages):
+        """
+        Sends a list of messages to the Ollama API and returns the AI's response message.
+        """
+        # Ensure system prompt is the first message
+        full_messages = [{"role": "system", "content": get_system_prompt()}] + messages
+
+        payload = {
+            "model": self.model_name,
+            "messages": full_messages,
+            "tools": get_tools(),
+            "stream": False
+        }
+        
+        QgsMessageLog.logMessage(f"AtQuery Debug: Ollama Request Payload: {json.dumps(payload, indent=2)}", "AtQuery", 0)
+        
+        headers = {'Content-Type': 'application/json'}
+        try:
+            response = requests.post('http://localhost:11434/api/chat', headers=headers, json=payload)
+            response.raise_for_status()
+            data = response.json()
+            QgsMessageLog.logMessage(f"AtQuery Debug: Ollama Raw Response: {json.dumps(data, indent=2)}", "AtQuery", 0)
+            return data['message']
+        except requests.exceptions.RequestException as e:
+            error_details = ""
+            if hasattr(response, 'text'):
+                error_details = f" - Response: {response.text}"
+            raise Exception(f"Ollama API Error: {str(e)}{error_details}")
 
     def handle_tool_call(self, tool_call_json):
+        """
+        Executes a single tool call from the AI and returns its output as a JSON string.
+        This function is designed to be robust against malformed inputs from the LLM
+        and to prevent serialization errors during testing with mock objects.
+        """
         try:
-            call = json.loads(tool_call_json)
-            name = call['function']['name']
-            args = call['function'].get('arguments', {})
+            tool_call = json.loads(tool_call_json)
+            func_info = tool_call.get("function", {})
+            name = func_info.get("name")
+            # Arguments can be a JSON string (OpenAI style) or a dict (Ollama style)
+            args_raw = func_info.get("arguments", {})
+            args = {}
+            
+            if isinstance(args_raw, dict):
+                args = args_raw
+            elif isinstance(args_raw, str) and args_raw.strip():
+                try:
+                    args = json.loads(args_raw)
+                except json.JSONDecodeError:
+                    return json.dumps({"error": f"Tool '{name}' was called with malformed JSON arguments: {args_raw}"})
+            
+            QgsMessageLog.logMessage(f"Executing tool: {name} with args: {args}", "AtQuery", 0)
 
+            # --- Tool Dispatch ---
             if name == 'get_layer_list':
                 layers = QgsProject.instance().mapLayers().values()
-                return json.dumps({"layers": [l.name() for l in layers]})
+                # Defensively cast to string to prevent mock object serialization errors
+                layer_names = [str(l.name()) for l in layers]
+                return json.dumps({"layers": layer_names})
 
             elif name == 'get_layer_details':
                 layer_name = args.get('layer_name')
-                # Use the same fuzzy matching logic as for query_layer/select_features
-                matching_layers = [l for l in QgsProject.instance().mapLayers().values() if layer_name.lower() in l.name().lower()]
-                if not matching_layers:
-                    return json.dumps({"error": f"Layer '{layer_name}' not found or no close match."})
-                elif len(matching_layers) > 1:
-                    return json.dumps({"error": f"Multiple layers found matching '{layer_name}': {[l.name() for l in matching_layers]}. Please be more specific."})
-                else:
-                    layer = matching_layers[0]
+                if not layer_name:
+                    return json.dumps({"error": "Missing required argument: 'layer_name'"})
                 
-                fields = [field.name() for field in layer.fields()]
-                return json.dumps({"layer_name": layer.name(), "fields": fields})
+                layer_list = QgsProject.instance().mapLayersByName(layer_name)
+                if not layer_list:
+                    return json.dumps({"error": f"Layer '{layer_name}' not found."})
+                
+                # Defensively cast to string
+                fields = [str(field.name()) for field in layer_list[0].fields()]
+                return json.dumps({"layer_name": str(layer_list[0].name()), "fields": fields})
 
-            elif name in ('query_layer', 'select_features'):
+            elif name == 'select_features':
                 layer_name = args.get('layer_name')
-                sql = args.get('sql', '').strip()
+                sql = args.get('sql')
 
-                matching_layers = [l for l in QgsProject.instance().mapLayers().values() if layer_name.lower() in l.name().lower()]
-                if not matching_layers:
-                    return json.dumps({"error": f"Layer '{layer_name}' not found or no close match."})
-                elif len(matching_layers) > 1:
-                    return json.dumps({"error": f"Multiple layers found matching '{layer_name}': {[l.name() for l in matching_layers]}. Please be more specific."})
-                else:
-                    layer = matching_layers[0]
-                if not layer:
-                    return json.dumps({"error": "Layer not found"})
+                if not layer_name or not sql:
+                    return json.dumps({"error": "Missing required arguments: 'layer_name' and 'sql'"})
 
-                # === BUILD A BULLETPROOF EXPRESSION ===
-                # If user gave full SQL like "AREA_CODE = 'STH'", extract the condition
-                condition = sql
-                if sql.upper().startswith("SELECT"):
-                    # Extract everything after WHERE
-                    if "WHERE" in sql.upper():
-                        condition = sql.split("WHERE", 1)[1].strip()
-                # If just a condition like "AREA_CODE = 'STH'"
-                # → Quote field name properly
-                if '=' in condition and not condition.strip().startswith('"'):
-                    field, value = [part.strip() for part in condition.split('=', 1)]
-                    if not field.startswith('"'):
-                        field = f'"{field}"'
-                    condition = f'{field} = {value}'
+                layer_list = QgsProject.instance().mapLayersByName(layer_name)
+                if not layer_list:
+                    return json.dumps({"error": f"Layer '{layer_name}' not found."})
+                layer = layer_list[0]
 
-                # Final safe expression
-                expr = QgsExpression(condition)
-                if expr.hasParserError():
-                    return json.dumps({"error": f"Invalid expression: {expr.parserErrorString()}"})
+                if not isinstance(layer, QgsVectorLayer):
+                    return json.dumps({"error": f"Layer '{layer_name}' is not a vector layer."})
 
-                request = QgsFeatureRequest(expr)
-                features = list(layer.getFeatures(request))
-                count = len(features)
-
-                # Select + zoom if requested
-                if name == 'select_features':
-                    layer.selectByIds([f.id() for f in features])
-                    if count > 0:
-                        self.iface.mapCanvas().zoomToSelected(layer)
-                    action = "Selected and zoomed to"
-                else:
-                    action = "Found"
-
+                layer.selectByExpression(sql)
+                count = layer.selectedFeatureCount()
+                
+                if count > 0:
+                    self.iface.mapCanvas().zoomToSelected(layer)
+                
+                # Defensively cast all values to prevent serialization errors
                 return json.dumps({
-                    "layer": layer_name,
-                    "sql": condition,
-                    "count": count,
-                    "action": action
+                    "layer": str(layer.name()),
+                    "sql": str(sql),
+                    "count": int(count),
+                    "action": "Selected and zoomed to"
                 })
             
-        except Exception as e:
-            return json.dumps({"error": str(e)})
-        
-    def _get_ai_response(self, prompt, tool_output=None):
-        """
-        Sends the request to the local Ollama server.
-        Returns (response_text, tool_call_json).
-        """
-        model = "llama3.2:3b-instruct-q4_K_M" # Assuming this model is downloaded
-        
-        # Build the message history for the LLM
-        messages = [
-            {"role": "user", "content": prompt}
-        ]
-        
-        # If we have tool output from a previous step, include it
-        if tool_output is not None:
-             messages.append({
-                 "role": "tool",
-                 "content": tool_output
-             })
+            elif name == 'join_attributes':
+                input_layer_name = args.get('input_layer_name')
+                join_layer_name = args.get('join_layer_name')
+                input_join_field = args.get('input_join_field')
+                join_layer_field = args.get('join_layer_field')
+                join_prefix = args.get('join_prefix', '')
 
-        # Tool calls are specified in the payload to enable function calling
-        payload = {
-            "model": model,
-            "messages": messages,
-            "system": get_system_prompt(),
-            "tools": get_tools(),
-            "stream": False # We need the full response at once
-        }
-        
-        print(f"Ollama API Request Payload: {json.dumps(payload, indent=2)}")
-        
-        headers = {'Content-Type': 'application/json'}
-        response = requests.post('http://localhost:11434/api/chat', headers=headers, json=payload)
-        response.raise_for_status() # Raises an exception for bad status codes
-        
-        data = response.json()
-        QgsMessageLog.logMessage(f"AtQuery Debug: Ollama Raw Response: {json.dumps(data, indent=2)}", "AtQuery", 0)
-        
-        # Check for tool call
-        if 'tool_calls' in data['message']:
-            QgsMessageLog.logMessage(f"AtQuery Debug: Tool calls detected in Ollama response.", "AtQuery", 0)
-            # Ollama returns a list of tool calls. We only support one for now.
-            tool_call = data['message']['tool_calls'][0]
-            tool_call_json = json.dumps(tool_call)
-            return data['message']['content'] if 'content' in data['message'] else "", tool_call_json
-        else:
-            # If no tool calls, it's an unexpected conversational response.
-            # Log it as an error and return empty to force the AI to generate a tool call next turn.
-            QgsMessageLog.logMessage(f"AtQuery Error: AI did not generate a tool call. Raw response: {data['message'].get('content', 'No content')}", "AtQuery", 2)
-            return data['message'].get('content', 'No content'), None # Return content for debugging, but no tool call
+                if not all([input_layer_name, join_layer_name, input_join_field, join_layer_field]):
+                    return json.dumps({"error": "Missing one or more required arguments for join."})
 
-    def handle_ai_response(self, response_text):
-        """Displays the final AI answer with nice SQL code formatting."""
-        if not response_text.strip():
-            self.chat_display.append("<br><b>AtQuery:</b> No result.")
-            return
+                input_layer_list = QgsProject.instance().mapLayersByName(input_layer_name)
+                join_layer_list = QgsProject.instance().mapLayersByName(join_layer_name)
 
-        # Convert markdown ```sql ... ``` into styled HTML block
-        lines = response_text.split('\n')
-        formatted = response_text
+                if not input_layer_list:
+                    return json.dumps({"error": f"Input layer '{input_layer_name}' not found."})
+                if not join_layer_list:
+                    return json.dumps({"error": f"Join layer '{join_layer_name}' not found."})
 
-        # Replace ```sql ... ``` with styled <pre> block
-        in_code_block = False
-        lines = formatted.split('\n')
-        output_lines = []
+                input_layer = input_layer_list[0]
+                join_layer = join_layer_list[0]
 
-        for line in lines:
-            if line.strip().startswith('```sql'):
-                output_lines.append('<pre style="background:#f4f4f4; padding:12px; border-radius:8px; font-family:Consolas,monospace; margin:10px 0;">')
-                in_code_block = True
-            elif line.strip() == '```':
-                output_lines.append('</pre>')
-                in_code_block = False
-            elif in_code_block:
-                output_lines.append(line)
-            else:
-                output_lines.append(line)
+                alg_params = {
+                    'INPUT': input_layer,
+                    'FIELD': input_join_field,
+                    'INPUT_2': join_layer,
+                    'FIELD_2': join_layer_field,
+                    'PREFIX': join_prefix,
+                    'OUTPUT': 'memory:'
+                }
 
-        final_html = "<br>".join(output_lines)
+                try:
+                    result = processing.run("qgis:joinattributestable", alg_params)
+                    QgsProject.instance().addMapLayer(result['OUTPUT'])
+                    
+                    return json.dumps({
+                        "status": "success",
+                        "message": f"Join completed. Fields from '{str(join_layer_name)}' added to '{str(input_layer_name)}'."
+                    })
+                except Exception as e:
+                    return json.dumps({"error": f"Join algorithm failed: {str(e)}"})
 
-        # Final display
-        self.chat_display.append(f"<br><b>AtQuery:</b> {final_html}")
-
-    def execute_code(self, code_text):
-            """Runs the PyQGIS code generated by the AI safely."""
-            
-            # 1. Clean up the code (AI often wraps code in markdown)
-            clean_code = code_text.replace("```python", "").replace("```", "").strip()
-            
-            if not clean_code:
-                self.chat_display.append("❌ AI returned empty code.")
-                return
-
-            self.chat_display.append(f"\n> AI CODE:\n{clean_code}")
-            
-            # 2. Use exec() to run the code in a controlled environment
-            try:
-                # Define the execution scope: all variables and functions available to the AI code
-                # We override 'print' to redirect output back to the chat display
-                execution_scope = {
-                    'iface': self.iface,
-                    'QgsProject': QgsProject,
-                    'QgsMessageLog': QgsMessageLog,
-                    # Redirect print() function output to the chat display
-                    'print': lambda x: self.chat_display.append(f"[OUTPUT] {x}")
+            elif name == 'create_buffer':
+                layer_name = args.get('layer_name')
+                distance = args.get('distance')
+                output_layer_name = args.get('output_layer_name')
+                
+                if not layer_name or distance is None:
+                    return json.dumps({"error": "Missing required arguments: 'layer_name' and 'distance'"})
+                
+                layer_list = QgsProject.instance().mapLayersByName(layer_name)
+                if not layer_list:
+                    return json.dumps({"error": f"Layer '{layer_name}' not found."})
+                
+                layer = layer_list[0]
+                
+                if not isinstance(layer, QgsVectorLayer):
+                    return json.dumps({"error": f"Layer '{layer_name}' is not a vector layer."})
+                
+                # Generate output layer name if not provided
+                if not output_layer_name:
+                    output_layer_name = f"{layer_name}_buffer_{distance}m"
+                
+                # Run the buffer algorithm
+                alg_params = {
+                    'INPUT': layer,
+                    'DISTANCE': distance,
+                    'SEGMENTS': 5,
+                    'END_CAP_STYLE': 0,  # Round
+                    'JOIN_STYLE': 0,  # Round
+                    'MITER_LIMIT': 2,
+                    'DISSOLVE': False,
+                    'OUTPUT': 'memory:'
                 }
                 
-                exec(clean_code, execution_scope)
+                try:
+                    result = processing.run("native:buffer", alg_params)
+                    output_layer = result['OUTPUT']
+                    output_layer.setName(output_layer_name)
+                    QgsProject.instance().addMapLayer(output_layer)
+                    
+                    return json.dumps({
+                        "status": "success",
+                        "layer_name": str(output_layer_name),
+                        "message": f"Buffer layer '{str(output_layer_name)}' created successfully with {distance}m distance."
+                    })
+                except Exception as e:
+                    return json.dumps({"error": f"Buffer algorithm failed: {str(e)}"})
+
+            elif name == 'create_bbox_layer':
+                layer_name = args.get('layer_name', 'BoundingBox')
+                extent_str = args.get('extent', '@map_extent')
                 
-                # IMPORTANT: Explicit success message to confirm action
-                self.chat_display.append("\n✅ [SUCCESS: Selection/Action Executed]")
+                if extent_str == '@map_extent':
+                    extent = self.iface.mapCanvas().extent()
+                else:
+                    try:
+                        coords = [float(x.strip()) for x in extent_str.split(',')]
+                        extent = QgsRectangle(coords[0], coords[1], coords[2], coords[3])
+                    except (ValueError, IndexError):
+                        return json.dumps({"error": "Invalid extent format. Use 'xmin,ymin,xmax,ymax'."})
                 
-            except Exception as e:
-                self.chat_display.append(f"\n❌ [EXECUTION ERROR] {type(e).__name__}: {str(e)}")
-                QgsMessageLog.logMessage(f"PyQGIS Execution Error: {traceback.format_exc()}", 'AtQuery', 2)
+                crs = self.iface.mapCanvas().mapSettings().destinationCrs().authid()
+                new_layer = QgsVectorLayer(f"Polygon?crs={crs}", layer_name, "memory")
+                
+                if not new_layer.isValid():
+                    return json.dumps({"error": "Failed to create bounding box layer."})
+                
+                feature = QgsFeature()
+                feature.setGeometry(QgsGeometry.fromRect(extent))
+                new_layer.dataProvider().addFeatures([feature])
+                new_layer.updateExtents()
+                QgsProject.instance().addMapLayer(new_layer)
+                
+                return json.dumps({
+                    "layer_name": str(layer_name),
+                    "message": f"Bounding box layer '{str(layer_name)}' created successfully."
+                })
+
+            else:
+                return json.dumps({"error": f"Tool '{name}' not found."})
+
+        except Exception as e:
+            error_info = f"Tool execution failed: {traceback.format_exc()}"
+            QgsMessageLog.logMessage(error_info, "AtQuery", 2)
+            return json.dumps({"error": str(e)})
+
+    def check_ollama_model_availability(self):
+        """Check if the specified Ollama model is available."""
+        try:
+            response = requests.get('http://localhost:11434/api/tags')
+            if response.status_code == 200:
+                models = response.json().get('models', [])
+                model_names = [m['name'] for m in models]
+                
+                if self.model_name in model_names:
+                    QgsMessageLog.logMessage(f"Model '{self.model_name}' is available.", "AtQuery", 0)
+                    return True
+                else:
+                    # Provide helpful guidance for common issues
+                    if "llama3:latest" in model_names and "llama3.1" not in str(model_names):
+                        error_msg = (
+                            f"Model '{self.model_name}' not found. You have 'llama3:latest' which does NOT support function calling.\n"
+                            f"Please install llama3.1 using: ollama pull llama3.1"
+                        )
+                    else:
+                        error_msg = (
+                            f"Model '{self.model_name}' not found. Available models: {', '.join(model_names)}.\n"
+                            f"Install it using: ollama pull {self.model_name}"
+                        )
+                    
+                    QgsMessageLog.logMessage(error_msg, "AtQuery", 2)
+                    self.chat_display.append(f"<b>Error:</b> {error_msg}")
+                    return False
+            else:
+                return False
+        except requests.exceptions.RequestException:
+            return False
+
+    def handle_ai_response(self, response_text):
+        """Displays the final AI answer."""
+        if not response_text.strip():
+            response_text = "The agent finished its work without a final message."
+        
+        self.chat_display.append(f"<br><b>AtQuery:</b> {response_text}")
 
     def closeEvent(self, event):
         """Handles the close event to emit a signal."""
