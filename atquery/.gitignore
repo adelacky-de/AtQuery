@@ -1,0 +1,15 @@
+# Ignoring test file
+test_brain_local.py
+
+# Ignoring python cache
+core/__pycache__/
+**/__pycache__/
+
+# Ignoring zip file in parent directory
+/../AtQuery_Latest.zip
+
+# Ignoring macos files
+.DS_Store
+
+# Ignoring data files
+/data/AdminArea_DCD_20230609.gdb_converted.csv

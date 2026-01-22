@@ -5,6 +5,8 @@ import json
 import traceback
 import os
 import tempfile
+import time
+from datetime import datetime
 
 from qgis.PyQt import QtWidgets, QtCore
 from qgis.PyQt.QtCore import QEvent
@@ -164,6 +166,14 @@ class AtQueryDockWidget(QtWidgets.QDockWidget):
         if check_ollama_model_availability(self.model_name):
             self.layout_stack.setCurrentIndex(1) # Switch to chat view
             self.chat_display.append(f"🟢 Model '{self.model_name}' found. Ready.")
+            
+            # Get last update from brain file
+            brain_path = os.path.join(os.path.dirname(__file__), '..', 'core', 'ai_brain.py')
+            if os.path.exists(brain_path):
+                mtime = os.path.getmtime(brain_path)
+                last_update = datetime.fromtimestamp(mtime).strftime('%Y-%m-%d %H:%M:%S')
+                self.chat_display.append(f"<small style='color: #888;'>Last Update: {last_update}</small>")
+            
             self.user_input.setEnabled(True)
             self.send_button.setEnabled(True)
         else:
@@ -237,17 +247,24 @@ class AtQueryDockWidget(QtWidgets.QDockWidget):
         self.send_button.setEnabled(False)
         QtCore.QCoreApplication.processEvents()
 
-        # Initialize the message history for this conversation turn
-        messages = [{"role": "user", "content": user_text}]
+        # Use persistent history, but clear it if user explicitly asks for a 'new' session
+        if user_text.lower() in ["clear", "reset", "new chat"]:
+            self.conversation_history = []
+            self.chat_display.append("<br><i>History cleared.</i>")
+            return
+
+        # Initialize the turn-specific history
+        current_turn_history = [{"role": "user", "content": user_text}]
         
         try:
-            max_steps = 5  # Prevent infinite loops
+            max_steps = 10  # Increased for more complex reasoning headroom
             for step in range(max_steps):
                 QgsMessageLog.logMessage(f"AtQuery Agent: Step {step + 1}", "AtQuery", 0)
 
-                # Get the AI's next action
-                ai_response_message = self._get_ai_response(messages)
-                messages.append(ai_response_message)
+                # Send combined history (limit to last 5 full turns = ~10-15 messages)
+                combined_history = self.conversation_history[-10:] + current_turn_history
+                ai_response_message = self._get_ai_response(combined_history)
+                current_turn_history.append(ai_response_message)
 
                 # If there are no tool calls, it's the final answer
                 if not ai_response_message.get("tool_calls"):
@@ -270,10 +287,15 @@ class AtQueryDockWidget(QtWidgets.QDockWidget):
                     })
                 
                 # Add all tool outputs to the message history
-                messages.extend(tool_outputs)
+                current_turn_history.extend(tool_outputs)
 
             else: # This else belongs to the for loop
                 self.handle_ai_response("The agent could not finish its task in the maximum number of steps.")
+
+            # AT THE END: Persist the whole turn to the main history
+            self.conversation_history.extend(current_turn_history)
+            if len(self.conversation_history) > 30: # Hard limit
+                self.conversation_history = self.conversation_history[-30:]
 
         except Exception as e:
             error_message = f"An error occurred: {str(e)}\n{traceback.format_exc()}"
@@ -290,14 +312,41 @@ class AtQueryDockWidget(QtWidgets.QDockWidget):
         """
         Sends a list of messages to the Ollama API and returns the AI's response message.
         """
+        # --- History Sanitization ---
+        # The 3B model is prone to adding prefixes like "None," or "Answer:".
+        # We strip these from the history so they don't pollute the context and cause loops.
+        sanitized_messages = []
+        prefixes_to_strip = [
+            "AtQuery:", "User:", "Answer:", "Response:", "Thought:",
+            "AtQuery Response:", "AI:", "Assistant:", "None,"
+        ]
+        
+        for msg in messages:
+            new_msg = msg.copy()
+            if msg.get('role') == 'assistant' and msg.get('content'):
+                content = msg['content'].strip()
+                changed = True
+                while changed:
+                    changed = False
+                    for prefix in prefixes_to_strip:
+                        if content.lower().startswith(prefix.lower()):
+                            content = content[len(prefix):].strip()
+                            changed = True
+                            break
+                new_msg['content'] = content
+            sanitized_messages.append(new_msg)
+
         # Ensure system prompt is the first message
-        full_messages = [{"role": "system", "content": get_system_prompt()}] + messages
+        full_messages = [{"role": "system", "content": get_system_prompt()}] + sanitized_messages
 
         payload = {
             "model": self.model_name,
             "messages": full_messages,
             "tools": get_tools(),
-            "stream": False
+            "stream": False,
+            "options": {
+                "stop": ["User:", "AtQuery:", "Response:", "Thought:", "\n\n"]
+            }
         }
         
         QgsMessageLog.logMessage(f"AtQuery Debug: Ollama Request Payload: {json.dumps(payload, indent=2)}", "AtQuery", 0)
@@ -308,12 +357,136 @@ class AtQueryDockWidget(QtWidgets.QDockWidget):
             response.raise_for_status()
             data = response.json()
             QgsMessageLog.logMessage(f"AtQuery Debug: Ollama Raw Response: {json.dumps(data, indent=2)}", "AtQuery", 0)
-            return data['message']
+            
+            msg = data['message']
+            
+            # Fallback: If 'tool_calls' is empty but 'content' looks like JSON, try to parse it
+            if not msg.get('tool_calls') and msg.get('content'):
+                content = msg['content'].strip()
+                
+                # Strip trailing quotes or messy closures
+                while content.endswith('"') or content.endswith("'"):
+                    content = content[:-1].strip()
+                
+                if '{' in content and ('function' in content or 'name' in content):
+                    try:
+                        # Extract JSON-like substring
+                        start_idx = content.find('{')
+                        end_idx = content.rfind('}') + 1
+                        json_str = content[start_idx:end_idx]
+                        
+                        # Fix common key mismatches and string-vs-object failures
+                        json_str = json_str.replace('"parameters"', '"arguments"')
+                        
+                        # Handle the common "function": "name" vs "function": {"name": "name"} failure
+                        # This is a bit risky with regex but needed for the 3B model
+                        import re
+                        # If "function": "string", change to "function": {"name": "string"}
+                        json_str = re.sub(r'"function":\s*"([^"]+)"', r'"function": {"name": "\1"}', json_str)
+                        
+                        extra_data = json.loads(json_str)
+                        
+                        # Uniform repair into tool_calls list
+                        raw_calls = []
+                        if isinstance(extra_data, dict):
+                            if 'tool_calls' in extra_data:
+                                raw_calls = extra_data['tool_calls']
+                            elif 'function' in extra_data or 'name' in extra_data:
+                                raw_calls = [extra_data]
+                        elif isinstance(extra_data, list):
+                            raw_calls = extra_data
+
+                        # Final normalization to ensure Ollama accepts it back in history
+                        normalized_calls = []
+                        for call in raw_calls:
+                            # 1. Handle "naked" function objects (e.g., {"name": "...", "arguments": {}})
+                            if 'name' in call and 'function' not in call:
+                                func_obj = call
+                            else:
+                                func_obj = call.get('function', {})
+                                
+                            # 2. Map parameters to arguments
+                            if 'parameters' in func_obj and 'arguments' not in func_obj:
+                                func_obj['arguments'] = func_obj.pop('parameters')
+                            
+                            # 3. DEFENSIVE: Replace common placeholders with last known valid names
+                            args = func_obj.get('arguments', {})
+                            for k, v in args.items():
+                                if isinstance(v, str) and v.lower() in ["your_layer_name", "layer_name_here", "example_layer", "some_layer"]:
+                                    # Fallback search for a layer name in history (messages)
+                                    for prev in reversed(messages):
+                                        if prev.get('role') == 'tool':
+                                            try:
+                                                tool_data = json.loads(prev['content'])
+                                                # Look for 'layers' list in QgsProject_mapLayers output
+                                                if 'layers' in tool_data and isinstance(tool_data['layers'], list) and tool_data['layers']:
+                                                    args[k] = tool_data['layers'][0]
+                                                    break
+                                            except:
+                                                pass
+                                    
+                            # 4. Re-structure into valid tool_call object
+                            normalized_calls.append({
+                                "id": call.get('id', f"call_{time.time_ns()}"),
+                                "type": "function",
+                                "function": {
+                                    "name": str(func_obj.get('name', '')),
+                                    "arguments": args
+                                }
+                            })
+                        
+                        if normalized_calls:
+                            msg['tool_calls'] = normalized_calls
+                            msg['content'] = content[:start_idx].strip()
+                            
+                    except Exception as parse_err:
+                        QgsMessageLog.logMessage(f"AtQuery Warning: Detailed JSON repair failed: {str(parse_err)}", "AtQuery", 1)
+            
+            return msg
         except requests.exceptions.RequestException as e:
             error_details = ""
             if hasattr(response, 'text'):
                 error_details = f" - Response: {response.text}"
             raise Exception(f"Ollama API Error: {str(e)}{error_details}")
+
+    def _resolve_layer(self, layer_name):
+        """
+        Attempts to find a QGIS layer by name using multiple strategies:
+        1. Exact match.
+        2. Case-insensitive match.
+        3. Stripping common suffixes added by models (e.g. " - DCD").
+        4. Matching by stem (e.g. "AdminArea" matches "AdminArea_DCD...").
+        """
+        if not layer_name: return None
+        
+        project = QgsProject.instance()
+        
+        # 1. Exact Match
+        matches = project.mapLayersByName(layer_name)
+        if matches: return matches[0]
+        
+        # 2. Iterative Search through all layers
+        all_layers = project.mapLayers().values()
+        
+        # Strategy A: Case-insensitive match
+        for l in all_layers:
+            if str(l.name()).lower() == layer_name.lower():
+                return l
+                
+        # Strategy B: Suffix Stripping (Handle hallucinations like "Name - DCD")
+        if " - " in layer_name:
+            base_name = layer_name.split(" - ")[0].strip()
+            for l in all_layers:
+                if str(l.name()).lower() == base_name.lower():
+                    return l
+
+        # Strategy C: Stem matching (If the requested name is a substring of the layer name)
+        # This is useful when the model truncates very long names.
+        for l in all_layers:
+            if layer_name.lower() in str(l.name()).lower() or str(l.name()).lower() in layer_name.lower():
+                return l
+                
+        return None
 
     def handle_tool_call(self, tool_call_json):
         """
@@ -340,39 +513,36 @@ class AtQueryDockWidget(QtWidgets.QDockWidget):
             QgsMessageLog.logMessage(f"Executing tool: {name} with args: {args}", "AtQuery", 0)
 
             # --- Tool Dispatch ---
-            if name == 'get_layer_list':
+            if name == 'QgsProject_mapLayers':
                 layers = QgsProject.instance().mapLayers().values()
-                # Defensively cast to string to prevent mock object serialization errors
                 layer_names = [str(l.name()) for l in layers]
                 return json.dumps({"layers": layer_names})
 
-            elif name == 'get_layer_details':
+            elif name == 'QgsVectorLayer_fields':
                 layer_name = args.get('layer_name')
                 if not layer_name:
                     return json.dumps({"error": "Missing required argument: 'layer_name'"})
                 
-                layer_list = QgsProject.instance().mapLayersByName(layer_name)
-                if not layer_list:
+                layer = self._resolve_layer(layer_name)
+                if not layer:
                     return json.dumps({"error": f"Layer '{layer_name}' not found."})
                 
-                # Defensively cast to string
-                fields = [str(field.name()) for field in layer_list[0].fields()]
-                return json.dumps({"layer_name": str(layer_list[0].name()), "fields": fields})
+                fields = [str(field.name()) for field in layer.fields()]
+                return json.dumps({"layer_name": str(layer.name()), "fields": fields})
 
-            elif name == 'select_features':
+            elif name == 'QgsVectorLayer_selectByExpression':
                 layer_name = args.get('layer_name')
                 sql = args.get('sql')
 
                 if not layer_name or not sql:
                     return json.dumps({"error": "Missing required arguments: 'layer_name' and 'sql'"})
 
-                layer_list = QgsProject.instance().mapLayersByName(layer_name)
-                if not layer_list:
+                layer = self._resolve_layer(layer_name)
+                if not layer:
                     return json.dumps({"error": f"Layer '{layer_name}' not found."})
-                layer = layer_list[0]
 
                 if not isinstance(layer, QgsVectorLayer):
-                    return json.dumps({"error": f"Layer '{layer_name}' is not a vector layer."})
+                    return json.dumps({"error": f"Layer '{layer.name()}' is not a vector layer."})
 
                 layer.selectByExpression(sql)
                 count = layer.selectedFeatureCount()
@@ -380,7 +550,6 @@ class AtQueryDockWidget(QtWidgets.QDockWidget):
                 if count > 0:
                     self.iface.mapCanvas().zoomToSelected(layer)
                 
-                # Defensively cast all values to prevent serialization errors
                 return json.dumps({
                     "layer": str(layer.name()),
                     "sql": str(sql),
@@ -388,7 +557,7 @@ class AtQueryDockWidget(QtWidgets.QDockWidget):
                     "action": "Selected and zoomed to"
                 })
             
-            elif name == 'join_attributes':
+            elif name == 'processing_run_joinattributestable':
                 input_layer_name = args.get('input_layer_name')
                 join_layer_name = args.get('join_layer_name')
                 input_join_field = args.get('input_join_field')
@@ -429,7 +598,7 @@ class AtQueryDockWidget(QtWidgets.QDockWidget):
                 except Exception as e:
                     return json.dumps({"error": f"Join algorithm failed: {str(e)}"})
 
-            elif name == 'create_buffer':
+            elif name == 'processing_run_native_buffer':
                 layer_name = args.get('layer_name')
                 distance = args.get('distance')
                 output_layer_name = args.get('output_layer_name')
@@ -446,17 +615,15 @@ class AtQueryDockWidget(QtWidgets.QDockWidget):
                 if not isinstance(layer, QgsVectorLayer):
                     return json.dumps({"error": f"Layer '{layer_name}' is not a vector layer."})
                 
-                # Generate output layer name if not provided
                 if not output_layer_name:
                     output_layer_name = f"{layer_name}_buffer_{distance}m"
                 
-                # Run the buffer algorithm
                 alg_params = {
                     'INPUT': layer,
                     'DISTANCE': distance,
                     'SEGMENTS': 5,
-                    'END_CAP_STYLE': 0,  # Round
-                    'JOIN_STYLE': 0,  # Round
+                    'END_CAP_STYLE': 0,
+                    'JOIN_STYLE': 0,
                     'MITER_LIMIT': 2,
                     'DISSOLVE': False,
                     'OUTPUT': 'memory:'
@@ -476,7 +643,7 @@ class AtQueryDockWidget(QtWidgets.QDockWidget):
                 except Exception as e:
                     return json.dumps({"error": f"Buffer algorithm failed: {str(e)}"})
 
-            elif name == 'create_bbox_layer':
+            elif name == 'QgsVectorLayer_createMemoryLayer':
                 layer_name = args.get('layer_name', 'BoundingBox')
                 extent_str = args.get('extent', '@map_extent')
                 
@@ -493,7 +660,7 @@ class AtQueryDockWidget(QtWidgets.QDockWidget):
                 new_layer = QgsVectorLayer(f"Polygon?crs={crs}", layer_name, "memory")
                 
                 if not new_layer.isValid():
-                    return json.dumps({"error": "Failed to create bounding box layer."})
+                    return json.dumps({"error": "Failed to create memory layer."})
                 
                 feature = QgsFeature()
                 feature.setGeometry(QgsGeometry.fromRect(extent))
@@ -501,10 +668,83 @@ class AtQueryDockWidget(QtWidgets.QDockWidget):
                 new_layer.updateExtents()
                 QgsProject.instance().addMapLayer(new_layer)
                 
-                return json.dumps({
-                    "layer_name": str(layer_name),
-                    "message": f"Bounding box layer '{str(layer_name)}' created successfully."
-                })
+            elif name == 'QgsApplication_processingRegistry_algorithms':
+                search_term = args.get('search_term', '').lower()
+                from qgis.core import QgsApplication
+                
+                results = []
+                for alg in QgsApplication.processingRegistry().algorithms():
+                    if search_term in alg.name().lower() or search_term in alg.displayName().lower():
+                        results.append({
+                            "id": str(alg.id()),
+                            "name": str(alg.name()),
+                            "displayName": str(alg.displayName())
+                        })
+                        # Limit results to 20 to avoid context overflow
+                        if len(results) >= 20:
+                            break
+                
+                return json.dumps({"algorithms": results})
+
+            elif name == 'processing_algorithmHelp':
+                algorithm_id = args.get('algorithm_id')
+                if not algorithm_id:
+                    return json.dumps({"error": "Missing required argument: 'algorithm_id'"})
+                
+                # We need to capture the output of processing.algorithmHelp
+                import io
+                from contextlib import redirect_stdout
+                f = io.StringIO()
+                with redirect_stdout(f):
+                    processing.algorithmHelp(algorithm_id)
+                help_text = f.getvalue()
+                
+                if not help_text.strip():
+                    return json.dumps({"error": f"No help found for algorithm '{algorithm_id}'."})
+                
+                return json.dumps({"algorithm_id": str(algorithm_id), "help": help_text})
+
+            elif name == 'processing_run':
+                algorithm_id = args.get('algorithm_id')
+                params = args.get('parameters', {})
+                
+                if not algorithm_id:
+                    return json.dumps({"error": "Missing required argument: 'algorithm_id'"})
+
+                # Handle layer names in parameters - convert string names to layer objects
+                processed_params = {}
+                for key, value in params.items():
+                    if isinstance(value, str) and value not in ['memory:', 'TEMPORARY_OUTPUT']:
+                        # Check if it's a layer name
+                        layer_list = QgsProject.instance().mapLayersByName(value)
+                        if layer_list:
+                            processed_params[key] = layer_list[0]
+                        else:
+                            processed_params[key] = value
+                    else:
+                        processed_params[key] = value
+
+                try:
+                    result = processing.run(algorithm_id, processed_params)
+                    
+                    # If there's an OUTPUT or similar key in the result, add it to the project if it's a layer
+                    for key, output_value in result.items():
+                        if isinstance(output_value, (QgsVectorLayer, QgsMapLayer)):
+                            QgsProject.instance().addMapLayer(output_value)
+                        elif isinstance(output_value, str) and os.path.exists(output_value):
+                            # Try to load it if it's a file path result
+                            new_layer = QgsVectorLayer(output_value, f"Output_{key}", "ogr")
+                            if new_layer.isValid():
+                                QgsProject.instance().addMapLayer(new_layer)
+
+                    return json.dumps({
+                        "status": "success",
+                        "algorithm_id": str(algorithm_id),
+                        "results": {k: str(v) for k, v in result.items()},
+                        "message": f"Algorithm '{algorithm_id}' executed successfully."
+                    })
+                except Exception as e:
+                    return json.dumps({"error": f"Processing algorithm failed: {str(e)}"})
 
             else:
                 return json.dumps({"error": f"Tool '{name}' not found."})
@@ -551,7 +791,28 @@ class AtQueryDockWidget(QtWidgets.QDockWidget):
         if not response_text.strip():
             response_text = "The agent finished its work without a final message."
         
-        self.chat_display.append(f"<br><b>AtQuery:</b> {response_text}")
+        # --- UI Sanity Filter: Strip roleplay prefixes ---
+        prefixes_to_strip = [
+            "AtQuery:", "User:", "Answer:", "Response:", "Thought:",
+            "AtQuery Response:", "AI:", "Assistant:", "None,"
+        ]
+        
+        cleaned_text = response_text.strip()
+        
+        # Iteratively strip prefixes (in case there are multiple)
+        changed = True
+        while changed:
+            changed = False
+            for prefix in prefixes_to_strip:
+                if cleaned_text.lower().startswith(prefix.lower()):
+                    cleaned_text = cleaned_text[len(prefix):].strip()
+                    changed = True
+                    break
+        
+        if not cleaned_text:
+            cleaned_text = "The agent finished its work without a final message."
+
+        self.chat_display.append(f"<br><b>AtQuery:</b> {cleaned_text}")
 
     def closeEvent(self, event):
         """Handles the close event to emit a signal."""

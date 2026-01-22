@@ -26,7 +26,8 @@ atquery/
 │   ├── pylintrc               # Linting rules
 │   └── pyrightconfig.json     # Type checking config
 ├── core/                      # Core logic & AI engine
-│   └── ai_brain.py            # Tool schemas & system instructions
+│   ├── ai_brain.py            # Tool schemas & system instructions
+│   └── pyqgis_tools.md        # Technical tool reference
 ├── ui/                        # User interface components
 │   └── AtQuery_dockwidget.py  # Chat interface & logic
 ├── resources/                 # Assets & compiled resources
@@ -50,7 +51,7 @@ atquery/
 
 ### Component Details
 - **Root Files**: Contains the essential files for QGIS to recognize and load the plugin.
-- **core/**: The "brains" of the operation, where the AI's tool schemas and behavior are defined.
+- **core/**: The "brains" of the operation, containing tool definitions and a detailed [PyQGIS tool reference](file:///Users/adelachu/Desktop/WWU/AtQuery/atquery/core/pyqgis_tools.md).
 - **ui/**: All visual elements, including the dockable chat panel and its interaction logic.
 - **config/**: Centralized location for development environment and build tools.
 - **resources/**: Manages the plugin's icons and compiled assets.
