@@ -23,7 +23,7 @@ from qgis.core import (
 )
 import processing # Import processing separately as it's not directly in qgis.core
 
-from .installer_utils import (
+from ..utils.installer_utils import (
     check_ollama_api,
     check_ollama_model_availability,
     get_os_info,
@@ -32,7 +32,7 @@ from .installer_utils import (
     launch_installer
 )
 
-from .ai_brain import get_tools, get_system_prompt
+from ..core.ai_brain import get_tools, get_system_prompt
 
 # --- Installer Thread for Non-Blocking Download ---
 class InstallerThread(QtCore.QThread):

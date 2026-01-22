@@ -4,7 +4,7 @@ from qgis.PyQt.QtCore import QSettings, QTranslator, QCoreApplication, Qt
 from qgis.PyQt.QtGui import QIcon
 from qgis.PyQt.QtWidgets import QAction
 # NOTE: Removed 'from .resources import *' since we are loading the icon directly
-from .AtQuery_dockwidget import AtQueryDockWidget
+from .ui.AtQuery_dockwidget import AtQueryDockWidget
 
 class AtQuery:
     def __init__(self, iface):
@@ -22,7 +22,7 @@ class AtQuery:
 
     def initGui(self):
         # FIX: Loading icon with correct .jpg extension directly from the plugin folder.
-        icon_path = os.path.join(self.plugin_dir, 'Icon_AtQuery.jpg') 
+        icon_path = os.path.join(self.plugin_dir, 'resources', 'Icon_AtQuery.jpg') 
         
         self.action = QAction(QIcon(icon_path), self.tr(u'AI Chat for QGIS'), self.iface.mainWindow())
         self.action.triggered.connect(self.run)
