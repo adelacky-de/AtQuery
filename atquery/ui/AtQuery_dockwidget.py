@@ -379,11 +379,21 @@ class AtQueryDockWidget(QtWidgets.QDockWidget):
                         json_str = json_str.replace('"parameters"', '"arguments"')
                         
                         # Handle the common "function": "name" vs "function": {"name": "name"} failure
-                        # This is a bit risky with regex but needed for the 3B model
                         import re
                         # If "function": "string", change to "function": {"name": "string"}
                         json_str = re.sub(r'"function":\s*"([^"]+)"', r'"function": {"name": "\1"}', json_str)
                         
+                        # DEFENSIVE: Handle unescaped nested double quotes in the "sql" field
+                        # Example: "sql": "NAME = "Value"" -> "sql": "NAME = 'Value'"
+                        # We use a non-greedy search for the value of the sql key
+                        sql_matches = re.finditer(r'"sql":\s*"(.*?)"(?=[\s,}])', json_str)
+                        for match in sql_matches:
+                            full_sql_entry = match.group(0)
+                            sql_content = match.group(1)
+                            if '"' in sql_content:
+                                fixed_sql_content = sql_content.replace('"', "'")
+                                json_str = json_str.replace(full_sql_entry, f'"sql": "{fixed_sql_content}"')
+
                         extra_data = json.loads(json_str)
                         
                         # Uniform repair into tool_calls list
@@ -567,16 +577,13 @@ class AtQueryDockWidget(QtWidgets.QDockWidget):
                 if not all([input_layer_name, join_layer_name, input_join_field, join_layer_field]):
                     return json.dumps({"error": "Missing one or more required arguments for join."})
 
-                input_layer_list = QgsProject.instance().mapLayersByName(input_layer_name)
-                join_layer_list = QgsProject.instance().mapLayersByName(join_layer_name)
+                input_layer = self._resolve_layer(input_layer_name)
+                join_layer = self._resolve_layer(join_layer_name)
 
-                if not input_layer_list:
+                if not input_layer:
                     return json.dumps({"error": f"Input layer '{input_layer_name}' not found."})
-                if not join_layer_list:
+                if not join_layer:
                     return json.dumps({"error": f"Join layer '{join_layer_name}' not found."})
-
-                input_layer = input_layer_list[0]
-                join_layer = join_layer_list[0]
 
                 alg_params = {
                     'INPUT': input_layer,
@@ -606,11 +613,9 @@ class AtQueryDockWidget(QtWidgets.QDockWidget):
                 if not layer_name or distance is None:
                     return json.dumps({"error": "Missing required arguments: 'layer_name' and 'distance'"})
                 
-                layer_list = QgsProject.instance().mapLayersByName(layer_name)
-                if not layer_list:
+                layer = self._resolve_layer(layer_name)
+                if not layer:
                     return json.dumps({"error": f"Layer '{layer_name}' not found."})
-                
-                layer = layer_list[0]
                 
                 if not isinstance(layer, QgsVectorLayer):
                     return json.dumps({"error": f"Layer '{layer_name}' is not a vector layer."})
