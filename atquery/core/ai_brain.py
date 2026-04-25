@@ -2,373 +2,382 @@
 
 import os
 
-# 1. The Tool Definitions (Schema)
-# This is the standard JSON schema that tells Ollama which QGIS functions are available.
-TOOLS_SCHEMA = [
-    {
-        "type": "function",
-        "function": {
-            "name": "QgsProject_mapLayers",
-            "description": "Returns a list of all layer names in the current QGIS project. ALWAYS call this first to check available layers before attempting any geospatial operations.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "refresh": {
-                        "type": "boolean",
-                        "description": "Set to true to force a refresh of the layer list."
+# 1. The Skill Library (Categorized by Toolbox)
+TOOLBOXES = {
+    "ProjectDiscovery": [
+        {
+            "type": "function",
+            "function": {
+                "name": "QgsProject_mapLayers",
+                "description": "Lists all layer names in the current QGIS project. ALWAYS start here.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "refresh": {"type": "boolean", "description": "Force refresh."}
                     }
+                }
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "QgsProject_extent",
+                "description": "Returns the bounding box of the entire project.",
+                "parameters": {"type": "object", "properties": {}}
+            }
+        }
+    ],
+    "DataInspection": [
+        {
+            "type": "function",
+            "function": {
+                "name": "QgsVectorLayer_fields",
+                "description": "Retrieves field names for a specific layer.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "layer_name": {"type": "string", "description": "Exact layer name."}
+                    },
+                    "required": ["layer_name"]
                 }
             }
         },
-    },
+        {
+            "type": "function",
+            "function": {
+                "name": "QgsVectorLayer_crs",
+                "description": "Returns the Coordinate Reference System (CRS) of a layer.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "layer_name": {"type": "string", "description": "Exact layer name."}
+                    },
+                    "required": ["layer_name"]
+                }
+            }
+        }
+    ],
+    "SelectionTools": [
+        {
+            "type": "function",
+            "function": {
+                "name": "QgsVectorLayer_selectByExpression",
+                "description": "Selects features based on an SQL-like query.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "layer_name": {"type": "string"},
+                        "sql": {"type": "string", "description": "SQL filter e.g. \"field\" = 'value'"}
+                    },
+                    "required": ["layer_name", "sql"]
+                }
+            }
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "processing_run_selectbylocation",
+                "description": "Spatial selection between layers.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "input_layer_name": {"type": "string"},
+                        "predicate": {"type": "string", "description": "intersect, contains, etc."},
+                        "intersect_layer_name": {"type": "string"}
+                    },
+                    "required": ["input_layer_name", "predicate", "intersect_layer_name"]
+                }
+            }
+        }
+    ],
+    "LayerStyling": [
+        {
+            "type": "function",
+            "function": {
+                "name": "QgsVectorLayer_setSingleSymbolRenderer",
+                "description": "Changes layer color.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "layer_name": {"type": "string"},
+                        "color": {"type": "string", "description": "Color name or hex."}
+                    },
+                    "required": ["layer_name", "color"]
+                }
+            }
+        }
+    ],
+    "VectorProcessing": [
+        {
+            "type": "function",
+            "function": {
+                "name": "processing_run_native_buffer",
+                "description": "Creates a buffer zone around features.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "layer_name": {"type": "string"},
+                        "distance": {"type": "number"},
+                        "output_layer_name": {"type": "string"}
+                    },
+                    "required": ["layer_name", "distance"]
+                }
+            }
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "processing_run_reprojectlayer",
+                "description": "Reprojects a layer.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "layer_name": {"type": "string"},
+                        "target_crs": {"type": "string"}
+                    },
+                    "required": ["layer_name", "target_crs"]
+                }
+            }
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "processing_run_native_clip",
+                "description": "Clips a layer using another layer's geometry.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "input_layer": {"type": "string"},
+                        "overlay_layer": {"type": "string"},
+                        "output": {"type": "string", "description": "memory: or file path"}
+                    },
+                    "required": ["input_layer", "overlay_layer"]
+                }
+            }
+        }
+    ],
+    "RasterAnalysis": [
+        {
+            "type": "function",
+            "function": {
+                "name": "processing_run_gdal_slope",
+                "description": "Calculates slope from a DEM raster.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "INPUT": {"type": "string", "description": "Path to DEM raster"},
+                        "OUTPUT": {"type": "string", "description": "memory: or file path"}
+                    },
+                    "required": ["INPUT"]
+                }
+            }
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "processing_run_gdal_hillshade",
+                "description": "Generates hillshade from a DEM raster.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "INPUT": {"type": "string"},
+                        "Z_FACTOR": {"type": "number", "default": 1},
+                        "AZIMUTH": {"type": "number", "default": 315},
+                        "V_ANGLE": {"type": "number", "default": 45}
+                    },
+                    "required": ["INPUT"]
+                }
+            }
+        }
+    ],
+    "GeometryRefinement": [
+        {
+            "type": "function",
+            "function": {
+                "name": "processing_run_native_centroids",
+                "description": "Calculates the centroid for each feature in a layer.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "INPUT": {"type": "string", "description": "Layer name"},
+                        "OUTPUT": {"type": "string", "default": "memory:"}
+                    },
+                    "required": ["INPUT"]
+                }
+            }
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "processing_run_native_dissolve",
+                "description": "Merges features based on a field or all features.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "INPUT": {"type": "string"},
+                        "FIELD": {"type": "string", "description": "Optional field to dissolve by"}
+                    },
+                    "required": ["INPUT"]
+                }
+            }
+        }
+    ],
+    "LayerEditing": [
+        {
+            "type": "function",
+            "function": {
+                "name": "QgsVectorLayer_startEditing",
+                "description": "Starts an editing session for the specified layer.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "layer_name": {"type": "string"}
+                    },
+                    "required": ["layer_name"]
+                }
+            }
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "QgsVectorLayer_commitChanges",
+                "description": "Saves all changes made during the editing session.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "layer_name": {"type": "string"}
+                    },
+                    "required": ["layer_name"]
+                }
+            }
+        }
+    ],
+    "AdvancedAlgorithms": [
+        {
+            "type": "function",
+            "function": {
+                "name": "QgsApplication_processingRegistry_algorithms",
+                "description": "Searches for complex algorithms.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "search_term": {"type": "string"}
+                    },
+                    "required": ["search_term"]
+                }
+            }
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "processing_run",
+                "description": "Runs any QGIS algorithm.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "algorithm_id": {"type": "string"},
+                        "parameters": {"type": "object"}
+                    },
+                    "required": ["algorithm_id", "parameters"]
+                }
+            }
+        }
+    ]
+}
+
+# 2. Meta-Tools for Skilling (The Toolbox Catalog)
+CATALOG_TOOLS = [
     {
         "type": "function",
         "function": {
-            "name": "QgsVectorLayer_fields",
-            "description": "Retreives the field names for a specific layer. You MUST call this if the user asks for attributes, fields, or columns. Example: 'what attributes are in My_Layer?'",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "layer_name": {
-                        "type": "string",
-                        "description": "The EXACT name of the layer (e.g. 'AdminArea_DCD_20230609.gdb_converted'). DO NOT add or remove suffixes."
-                    }
-                },
-                "required": ["layer_name"]
-            }
+            "name": "get_toolbox_catalog",
+            "description": "Lists all available Toolboxes (categories) and their purposes. Use this to find which skills to load.",
+            "parameters": {"type": "object", "properties": {}}
         }
     },
     {
         "type": "function",
         "function": {
-            "name": "QgsVectorLayer_setSingleSymbolRenderer",
-            "description": "Changes the color of a vector layer to a single specified color. Use this to change layer appearance.",
+            "name": "load_toolbox_skills",
+            "description": "Loads all detailed skills (functions) for a specific toolbox category.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "layer_name": {
-                        "type": "string",
-                        "description": "The EXACT name of the layer to change the color of."
-                    },
-                    "color": {
-                        "type": "string",
-                        "description": "The color to set. Can be a color name (e.g., 'red'), or a hex code (e.g., '#FF0000')."
+                    "toolbox_name": {
+                        "type": "string", 
+                        "enum": list(TOOLBOXES.keys()),
+                        "description": "The category name to load."
                     }
                 },
-                "required": ["layer_name", "color"]
-            }
-        }
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "QgsVectorLayer_crs",
-            "description": "Returns the Coordinate Reference System (CRS) of a layer.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "layer_name": {
-                        "type": "string",
-                        "description": "The EXACT name of the layer to get the CRS from."
-                    }
-                },
-                "required": ["layer_name"]
-            }
-        }
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "processing_run_reprojectlayer",
-            "description": "Reprojects a layer to a new Coordinate Reference System (CRS).",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "layer_name": {
-                        "type": "string",
-                        "description": "The EXACT name of the layer to reproject."
-                    },
-                    "target_crs": {
-                        "type": "string",
-                        "description": "The target CRS, e.g., 'EPSG:4326'."
-                    },
-                    "output_layer_name": {
-                        "type": "string",
-                        "description": "Optional. Name for the output reprojected layer."
-                    }
-                },
-                "required": ["layer_name", "target_crs"]
-            }
-        }
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "QgsVectorLayer_selectByExpression",
-            "description": "Selects features from a vector layer based on an SQL-like query expression and zooms to the selection.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "layer_name": {
-                        "type": "string",
-                        "description": "The EXACT name of the layer to perform the selection on."
-                    },
-                    "sql": {
-                        "type": "string",
-                        "description": "The SQL-like expression to filter features (e.g., \"FIELD_NAME\" = 'Value')."
-                    }
-                },
-                "required": ["layer_name", "sql"]
-            }
-        }
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "QgsProject_extent",
-            "description": "Returns the extent (bounding box) of the entire QGIS project. Use this when the user asks for the overall map extent.",
-            "parameters": {
-                "type": "object",
-                "properties": {}
-            }
-        }
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "processing_run_selectbylocation",
-            "description": "Selects features from a layer that have a spatial relationship (intersect, contain, overlap) with features from another layer or a geometry. Use this for any spatial query like 'select features in this area' or 'find points inside this polygon'.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "input_layer_name": {
-                        "type": "string",
-                        "description": "The name of the layer from which to select features."
-                    },
-                    "predicate": {
-                        "type": "string",
-                        "description": "The geometric predicate to use. Examples: 'intersect', 'contains', 'overlaps', 'equals', 'crosses', 'disjoint', 'touches', 'within'. Use a list for multiple predicates e.g., ['intersect', 'contains']"
-                    },
-                    "intersect_layer_name": {
-                        "type": "string",
-                        "description": "The name of the layer to use for the spatial comparison."
-                    }
-                },
-                "required": ["input_layer_name", "predicate", "intersect_layer_name"]
-            }
-        }
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "processing_run_joinattributestable",
-            "description": "Joins attributes from a secondary layer to a primary layer based on a matching field value. This modifies the primary layer.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "input_layer_name": {
-                        "type": "string",
-                        "description": "The name of the primary layer to which attributes will be added."
-                    },
-                    "join_layer_name": {
-                        "type": "string",
-                        "description": "The name of the secondary layer providing the attributes."
-                    },
-                    "input_join_field": {
-                        "type": "string",
-                        "description": "The name of the join field in the primary (input) layer."
-                    },
-                    "join_layer_field": {
-                        "type": "string",
-                        "description": "The name of the join field in the secondary (join) layer."
-                    },
-                    "join_prefix": {
-                        "type": "string",
-                        "description": "Optional. A prefix to add to the names of the joined fields to avoid collisions."
-                    }
-                },
-                "required": ["input_layer_name", "join_layer_name", "input_join_field", "join_layer_field"]
-            }
-        }
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "processing_run_native_buffer",
-            "description": "Creates a buffer zone around all features in a layer. This creates a polygon layer with buffered geometries. Use this for distance-based buffer operations (e.g., '500m buffer', '10km buffer').",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "layer_name": {
-                        "type": "string",
-                        "description": "The EXACT name of the layer to buffer."
-                    },
-                    "distance": {
-                        "type": "number",
-                        "description": "Buffer distance in map units (meters for most projections)."
-                    },
-                    "output_layer_name": {
-                        "type": "string",
-                        "description": "Optional. Name for the output buffer layer. If not provided, will be named '{layer_name}_buffer_{distance}m'."
-                    }
-                },
-                "required": ["layer_name", "distance"]
-            }
-        }
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "QgsVectorLayer_createMemoryLayer",
-            "description": "Creates a temporary memory layer (e.g., a bounding box polygon) from a specified extent. The extent can be '@map_extent' for the current view or specific coordinates as 'xmin,ymin,xmax,ymax'. This tool is for creating a *new layer* representing an area, not for *getting* the extent of an existing layer or the project.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "layer_name": {
-                        "type": "string",
-                        "description": "The name for the new memory layer."
-                    },
-                    "extent": {
-                        "type": "string",
-                        "description": "The extent to use. Use '@map_extent' for current visible extent, or provide coordinates as 'xmin,ymin,xmax,ymax'."
-                    }
-                },
-                "required": ["layer_name", "extent"]
-            }
-        }
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "QgsApplication_processingRegistry_algorithms",
-            "description": "Searches for geoprocessing algorithms by keywords. Use this when the user asks for a complex operation and you don't know the exact algorithm ID.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "search_term": {
-                        "type": "string",
-                        "description": "The keyword to search for (e.g., 'slope', 'centroid', 'intersection')."
-                    }
-                },
-                "required": ["search_term"]
-            }
-        }
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "processing_algorithmHelp",
-            "description": "Returns the help description and parameter requirements for a specific QGIS algorithm ID. ALWAYS call this before processing_run if you are unsure about the parameter names or types.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "algorithm_id": {
-                        "type": "string",
-                        "description": "The ID of the algorithm (e.g., 'native:slope', 'qgis:intersection')."
-                    }
-                },
-                "required": ["algorithm_id"]
-            }
-        }
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "processing_run",
-            "description": "Executes a specified QGIS geoprocessing algorithm with a dictionary of parameters. This is the most powerful tool for complex operations.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "algorithm_id": {
-                        "type": "string",
-                        "description": "The ID of the algorithm to run."
-                    },
-                    "parameters": {
-                        "type": "object",
-                        "description": "A dictionary of parameters for the algorithm. Use 'memory:' as the value for 'OUTPUT' to create temporary layers."
-                    }
-                },
-                "required": ["algorithm_id", "parameters"]
+                "required": ["toolbox_name"]
             }
         }
     }
 ]
 
-# 2. The System Instruction (The AI's Personality and Rules)
+# 3. The System Instruction (The Skilling Framework)
 BASE_SYSTEM_PROMPT = """
-You are a QGIS processing engine. Your only purpose is to receive user requests and translate them into QGIS tool calls. You must follow the rules and workflow exactly as described.
+# SKILL HANDBOOK: QGIS AI AGENT
 
-**CRITICAL INSTRUCTION: YOUR ENTIRE RESPONSE MUST BE A SINGLE, VALID JSON OBJECT. DO NOT INCLUDE ANY CONVERSATIONAL TEXT, EXPLANATIONS, OR MARKDOWN OUTSIDE OF THE JSON. DO NOT USE `<|python_tag|>`. ANY DEVIATION WILL BE CONSIDERED AN ERROR.**
+You are an expert QGIS Automation Engineer. You operate using a dynamic **Toolbox** system.
 
-**WORKFLOW:**
+## CORE OPERATIONAL PRINCIPLES
+1. **Efficiency First**: To save tokens, you do not see all skills at once. Use the Toolbox system to find what you need.
+2. **The Toolbox Workflow**:
+    - **Step A: Catalog Lookup**: Call `get_toolbox_catalog` to see the available categories.
+    - **Step B: Skill Loading**: Call `load_toolbox_skills` for the category that matches the user's request.
+    - **Step C: Execution**: Once the skills are loaded, call the specific skill you need.
+3. **Step-by-Step Reasoning**: Before every action, perform a "Thought" step to plan your approach.
+4. **JSON Precision**: Your output MUST be a valid JSON object.
 
-1.  **ALWAYS START HERE:** The first step for any task is to understand the available layers. Call `QgsProject_mapLayers` to get a list of layer names. Do not assume any layers exist.
-2.  **INSPECT THE DATA:** Before performing any query or operation on a layer, you MUST know its structure. Call `QgsVectorLayer_fields` to get the attribute fields for any layer you intend to use.
-3.  **EXECUTE THE ACTION:** Based on the user's goal and your knowledge of the layer fields, choose the single best tool for the job.
-    *   For attribute queries (e.g., `name = 'New York'`), use `QgsVectorLayer_selectByExpression`.
-    *   For spatial queries (e.g., `find features inside this polygon`), use `processing_run_selectbylocation`.
-    *   For changing layer appearance, use `QgsVectorLayer_setSingleSymbolRenderer`.
-    *   For creating buffers, use `processing_run_native_buffer`.
-    *   For more complex geoprocessing, search with `QgsApplication_processingRegistry_algorithms`, get help with `processing_algorithmHelp`, and then execute with `processing_run`.
+## CLARIFICATION & PROACTIVITY
+1. **Ambiguity**: If a query is broad (e.g., "what layers"), ask for clarification (e.g., "Would you like the Names, the Count, or the Extent?").
+2. **Suggested Queries**: Always provide 2 specific follow-up queries at the end of your natural language response in the format:
+   `Suggested Query: 1. [Query] 2. [Query]`
+3. **Speed Optimization**: If the user's intent clearly maps to a toolbox you've already used or a core discovery tool, skip the Catalog step and go straight to loading or execution.
 
-**RULES:**
+## YOUR DYNAMIC TOOLBOXES
+- **ProjectDiscovery**: Essential for starting (listing layers, checking extent).
+- **DataInspection**: For checking fields and CRS.
+- **SelectionTools**: For attribute and spatial queries.
+- **LayerStyling**: For changing map appearance.
+- **VectorProcessing**: For geoprocessing (buffering, reprojection, clipping).
+- **RasterAnalysis**: For terrain and grid-based operations.
+- **GeometryRefinement**: For centroids, dissolve, and simplification.
+- **LayerEditing**: For manual attribute and geometry modifications.
+- **AdvancedAlgorithms**: For complex or custom QGIS algorithms.
 
-1.  **JSON ONLY:** Your entire output must be a single, valid JSON object.
-2.  **NO CONVERSATION:** Do not respond with conversational text. Do not explain your steps. Your only output should be a valid JSON object containing your tool calls.
-3.  **NO `<|python_tag|>`:** Absolutely do not include `<|python_tag|>` or any similar tags in your output.
-4.  **LAYER NAMES ARE EXACT:** Use the exact layer names provided by `QgsProject_mapLayers`. Do not guess, hallucinate, or modify layer names. If a layer name from the user does not exist, you must still try to use it.
-5.  **SQL QUOTING IS CRITICAL:** When using `QgsVectorLayer_selectByExpression`, field names MUST be in **double quotes** (`"FIELD_NAME"`) and string values MUST be in **single quotes** (`'value'`).
-    *   **Correct:** `{"tool_calls": [{"function": {"name": "QgsVectorLayer_selectByExpression", "arguments": {"layer_name": "MyLayer", "sql": "\\"status\\" = 'active'"}}}]}`
-    *   **Incorrect:** `... "sql": "'status' = 'active'" ...` (wrong field quotes)
-    *   **Incorrect:** `... "sql": "\\"status\\" = \\"active\\"" ...` (wrong value quotes)
-6.  **ONE GOAL, ONE TOOL:** Do not chain multiple tools together in one response. Choose the single best tool for the immediate task.
-7.  **DO NOT HALLUCINATE:** Only use information explicitly provided in the tool schemas or previous tool outputs. Do not invent layer names, field names, or values.
-8.  **STRICT TYPE ADHERENCE:** Always match the parameter types defined in the `TOOLS_SCHEMA`.
-    *   `QgsProject_mapLayers` `refresh` parameter is a `boolean`. Use `true` or `false` (JSON booleans), not strings.
-    *   `QgsVectorLayer_setSingleSymbolRenderer` `color` parameter is a `string`. Provide a color name (e.g., 'red') or hex code (e.g., '#FF0000').
-    *   `processing_run_native_buffer` `distance` parameter is a `number`. Provide a number (e.g., `100`), not a string.
-    *   `processing_run_selectbylocation` `predicate` parameter is a `string`. Provide a single string (e.g., 'intersects'), not a list.
-    *   `QgsVectorLayer_crs` returns a string (e.g., 'EPSG:4326'), not a QgsCoordinateReferenceSystem object.
-    *   `processing_run_reprojectlayer` `target_crs` parameter is a `string`. Provide a string (e.g., 'EPSG:3857').
-    *   `QgsVectorLayer_createMemoryLayer` `extent` parameter is a `string`. Provide a string (e.g., '@map_extent' or 'xmin,ymin,xmax,ymax').
-    *   `processing_algorithmHelp` `algorithm_id` parameter is a `string`.
-    *   `processing_run` `parameters` parameter is an `object` (JSON dictionary).
+## OUTPUT FORMAT
+Your response MUST be a single JSON object.
 
-**EXAMPLES:**
+```json
+{
+  "thought": "I will check the catalog to find the correct toolbox for buffering.",
+  "tool_calls": [
+    {
+      "function": {
+        "name": "get_toolbox_catalog",
+        "arguments": {}
+      }
+    }
+  ]
+}
+```
 
-*   **User:** "What layers are in my project?"
-    **You:** `{"tool_calls": [{"function": {"name": "QgsProject_mapLayers", "arguments": {"refresh": false}}}]}`
-*   **User:** "Show me the fields for the 'districts' layer."
-    **You:** `{"tool_calls": [{"function": {"name": "QgsVectorLayer_fields", "arguments": {"layer_name": "districts"}}}]}`
-*   **User:** "Select all districts with a population over 10000."
-    **You:** `{"tool_calls": [{"function": {"name": "QgsVectorLayer_selectByExpression", "arguments": {"layer_name": "districts", "sql": "\\"population\\" > 10000"}}}]}`
-*   **User:** "Find roads that cross the 'districts' layer."
-    **You:** `{"tool_calls": [{"function": {"name": "processing_run_selectbylocation", "arguments": {"input_layer_name": "roads", "predicate": "crosses", "intersect_layer_name": "districts"}}}]}`
-*   **User:** "Make the 'roads' layer bright red."
-    **You:** `{"tool_calls": [{"function": {"name": "QgsVectorLayer_setSingleSymbolRenderer", "arguments": {"layer_name": "roads", "color": "red"}}}]}`
-*   **User:** "Create a 500-meter buffer around the 'hospitals' layer."
-    **You:** `{"tool_calls": [{"function": {"name": "processing_run_native_buffer", "arguments": {"layer_name": "hospitals", "distance": 500}}}]}`
-*   **User:** "What is the CRS of the 'roads' layer?"
-    **You:** `{"tool_calls": [{"function": {"name": "QgsVectorLayer_crs", "arguments": {"layer_name": "roads"}}}]}`
-*   **User:** "Reproject 'points_of_interest' to EPSG:3857 and call it 'pois_mercator'."
-    **You:** `{"tool_calls": [{"function": {"name": "processing_run_reprojectlayer", "arguments": {"layer_name": "points_of_interest", "target_crs": "EPSG:3857", "output_layer_name": "pois_mercator"}}}]}`
-*   **User:** "Create a bounding box layer named 'my_bbox' for the current map extent."
-    **You:** `{"tool_calls": [{"function": {"name": "QgsVectorLayer_createMemoryLayer", "arguments": {"layer_name": "my_bbox", "extent": "@map_extent"}}}]}`
-*   **User:** "Search for algorithms related to 'clip'."
-    **You:** `{"tool_calls": [{"function": {"name": "QgsApplication_processingRegistry_algorithms", "arguments": {"search_term": "clip"}}}]}`
-*   **User:** "Get help for 'native:buffer'."
-    **You:** `{"tool_calls": [{"function": {"name": "processing_algorithmHelp", "arguments": {"algorithm_id": "native:buffer"}}}]}`
-*   **User:** "Run the 'native:union' algorithm on 'layer1' and 'layer2'."
-    **You:** `{"tool_calls": [{"function": {"name": "processing_run", "arguments": {"algorithm_id": "native:union", "parameters": {"INPUT": "layer1", "OVERLAY": "layer2", "OUTPUT": "memory:"}}}}]}`
+## SAFETY CONSTRAINTS
+- Do not attempt to delete files or layers.
+- Do not use algorithms from unknown providers.
+- If a toolbox or skill is missing, report the error in the 'thought'.
 """
 
+def get_toolbox_skills(toolbox_name):
+    """Returns the full schemas for a specific toolbox."""
+    return TOOLBOXES.get(toolbox_name, [])
 
-def get_tools():
-    """Returns the tool definitions for the Ollama API call."""
-    return TOOLS_SCHEMA
+def get_base_tools():
+    """Returns the meta-tools for the catalog and loading skills."""
+    return CATALOG_TOOLS
 
 def get_system_prompt():
-    """
-    Returns the system instruction for the Ollama API call.
-    """
+    """Returns the system instruction for the Skilling framework."""
     return BASE_SYSTEM_PROMPT

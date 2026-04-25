@@ -1,0 +1,41 @@
+# AtQuery Technical Documentation
+
+## 1. File Structure and Description
+
+- `AtQuery.py`: Main QGIS plugin entry point. Handles UI initialization, menu integration, and dock widget lifecycle.
+- `core/`:
+    - `ai_brain.py`: Contains the `TOOLS_SCHEMA` (JSON definitions of QGIS functions) and the `BASE_SYSTEM_PROMPT` (the "Skill Handbook").
+    - `pyqgis_tools.md`: Supplemental documentation for PyQGIS tools used by the AI.
+- `ui/`:
+    - `AtQuery_dockwidget.py`: The core logic of the plugin. Manages chat history, Ollama API calls, JSON repair logic, and tool execution.
+- `utils/`:
+    - `installer_utils.py`: Utilities for checking Ollama status and downloading/launching the installer.
+- `test_brain_local.py`: (Gitignored) A standalone script to test the AI's reasoning and tool-calling logic using a mock QGIS environment.
+- `resources/`: Graphics and icon assets.
+- `i18n/`: Translation files for internationalization.
+- `config/`: Configuration settings (if any).
+
+## 2. AI "Skilling" Technique (Toolbox Architecture)
+
+The "Skilling" technique implemented in AtQuery is inspired by modern agentic architectures (like Claude's Skills). Instead of overwhelming the LLM with a massive list of all available functions in every request, we use a dynamic **Toolbox** system. This is especially effective for 3B models like **`qwen2.5:3b`**, which prioritize speed and precision.
+
+- **Efficiency**: Reduces token usage by only loading the specific schemas needed for the task at hand.
+- **Hierarchical Discovery**: The AI starts with a "Catalog" tool. It identifies the relevant Toolbox (e.g., "VectorProcessing"), loads its specific "Skills" (e.g., "buffer"), and then executes them.
+- **Dynamic Turn Logic**: The plugin backend supports mid-turn skill injection, allowing the AI to "learn" new capabilities during its reasoning process.
+- **Category-Based Organization**: Skills are grouped into logical toolboxes (ProjectDiscovery, DataInspection, SelectionTools, LayerStyling, VectorProcessing, AdvancedAlgorithms), making it easier for the AI to navigate large APIs.
+
+## 3. Security Audit and Verification
+
+A comprehensive security check was performed to identify and mitigate risks associated with LLM-to-code execution:
+
+- **Algorithm Whitelisting**: The `processing_run` skill now checks for "dangerous" keywords (e.g., `delete`, `remove`, `drop`, `truncate`). Attempts to run these algorithms are blocked.
+- **SQL Sanitization**: Field names in `selectByExpression` are enforced to be in double quotes, and string values in single quotes, preventing many common SQL syntax errors and basic injection attempts.
+- **Local Isolation**: Since the AI runs on a local Ollama server, no project data, layer names, or attribute values are sent to external cloud APIs, ensuring maximum privacy.
+- **Subprocess Restriction**: Installer launch scripts are restricted to specific temporary paths to prevent arbitrary code execution via file path manipulation.
+
+## 4. Problems Encountered During Development
+
+- **JSON Malformation**: Initial testing showed that smaller models (3B range) frequently produced invalid JSON (missing brackets, unescaped quotes). This was solved by an aggressive regex-based JSON repair mechanism in `AtQuery_dockwidget.py`.
+- **Instruction Drift**: Models would occasionally "forget" the JSON-only rule and include conversational filler. The Skilling prompt and the repair layer now strip these automatically.
+- **Type Sensitivity**: LLMs often pass `10` as `"10"`. The `_convert_arg_type` utility was implemented to normalize these types against the expected schema.
+- **Multi-Tool Chaining**: Some models attempted to call multiple tools in one turn without knowing the results of the first call. The "Skill Handbook" now strictly prohibits this, enforcing a turn-based feedback loop.

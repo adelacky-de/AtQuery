@@ -34,7 +34,7 @@ from ..utils.installer_utils import (
     launch_installer
 )
 
-from ..core.ai_brain import get_tools, get_system_prompt
+from ..core.ai_brain import get_base_tools, get_toolbox_skills, get_system_prompt
 
 # --- Installer Thread for Non-Blocking Download ---
 class InstallerThread(QtCore.QThread):
@@ -60,12 +60,35 @@ class AtQueryDockWidget(QtWidgets.QDockWidget):
     closingPlugin = QtCore.pyqtSignal()
     PROGRESS_EVENT_TYPE = QEvent.Type(QEvent.User + 1)
 
+    def _get_layer_by_name(self, layer_name):
+        """Helper to find a layer object by its display name."""
+        from qgis.core import QgsProject
+        layers = QgsProject.instance().mapLayers().values()
+        for layer in layers:
+            if layer.name() == layer_name:
+                return layer
+        return None
+
+    def _run_processing_alg(self, algorithm_id, params):
+        """Helper to execute a processing algorithm and return JSON result."""
+        try:
+            import processing
+            # --- SECURITY CHECK ---
+            dangerous_terms = ['delete', 'remove', 'drop', 'format', 'truncate', 'sql:execute']
+            if any(term in algorithm_id.lower() for term in dangerous_terms):
+                return json.dumps({"error": f"Security violation: Algorithm '{algorithm_id}' is restricted."})
+
+            result = processing.run(algorithm_id, params)
+            return json.dumps({"status": "success", "result": str(result)})
+        except Exception as e:
+            return json.dumps({"error": f"Algorithm '{algorithm_id}' failed: {str(e)}"})
+
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle("AtQuery AI Agent")
         self.iface = None 
         self.ollama_url = 'http://localhost:11434/api/chat'
-        self.model_name = "llama3.2:3b-instruct-q4_K_M" # Reverted to user's preferred model
+        self.model_name = "qwen2.5:3b" # Highly optimized 3B model for Mac M-chips
         self.conversation_history = []
         
         # 1. Main Widget and Stacked Layout (for different states)
@@ -253,17 +276,18 @@ class AtQueryDockWidget(QtWidgets.QDockWidget):
             self.chat_display.append("<br><i>History cleared.</i>")
             return
 
-        # Initialize the turn-specific history
+        # Initialize the turn-specific history and active tools
         current_turn_history = [{"role": "user", "content": user_text}]
+        active_tools = get_base_tools() # Start with only the meta-tools
         
         try:
             max_steps = 10  # Increased for more complex reasoning headroom
             for step in range(max_steps):
                 QgsMessageLog.logMessage(f"AtQuery Agent: Step {step + 1}", "AtQuery", 0)
 
-                # Send combined history (limit to last 5 full turns = ~10-15 messages)
+                # Send combined history
                 combined_history = self.conversation_history[-10:] + current_turn_history
-                ai_response_message = self._get_ai_response(combined_history)
+                ai_response_message = self._get_ai_response(combined_history, active_tools)
                 current_turn_history.append(ai_response_message)
 
                 # If there are no tool calls, it's the final answer
@@ -280,6 +304,18 @@ class AtQueryDockWidget(QtWidgets.QDockWidget):
                 tool_outputs = []
                 for tool_call in tool_calls:
                     tool_output_content = self.handle_tool_call(json.dumps(tool_call))
+                    
+                    # --- DYNAMIC SKILL LOADING ---
+                    if tool_call.get("function", {}).get("name") == "load_toolbox_skills":
+                        try:
+                            # Parse the output which contains the new skills
+                            new_skills = json.loads(tool_output_content)
+                            if isinstance(new_skills, list):
+                                active_tools.extend(new_skills)
+                                QgsMessageLog.logMessage(f"AtQuery: Loaded {len(new_skills)} new skills into the turn.", "AtQuery", 0)
+                        except:
+                            pass
+
                     tool_outputs.append({
                         "role": "tool",
                         "content": tool_output_content,
@@ -308,7 +344,7 @@ class AtQueryDockWidget(QtWidgets.QDockWidget):
             self.send_button.setEnabled(True)
             self.user_input.setFocus()
 
-    def _get_ai_response(self, messages):
+    def _get_ai_response(self, messages, tools):
         """
         Sends a list of messages to the Ollama API and returns the AI's response message.
         """
@@ -342,9 +378,12 @@ class AtQueryDockWidget(QtWidgets.QDockWidget):
         payload = {
             "model": self.model_name,
             "messages": full_messages,
-            "tools": get_tools(),
+            "tools": tools,
             "stream": False,
             "options": {
+                "temperature": 0.1,
+                "num_predict": 300,
+                "top_p": 0.9,
                 "stop": ["User:", "AtQuery:", "Response:", "Thought:", "\n\n"]
             }
         }
@@ -353,17 +392,12 @@ class AtQueryDockWidget(QtWidgets.QDockWidget):
         
         headers = {'Content-Type': 'application/json'}
         try:
-            response = requests.post('http://localhost:11434/api/chat', headers=headers, json=payload)
+            response = requests.post(self.ollama_url, json=payload, timeout=60)
             response.raise_for_status()
             data = response.json()
-            QgsMessageLog.logMessage(f"AtQuery Debug: Ollama Raw Response: {json.dumps(data, indent=2)}", "AtQuery", 0)
-            
-            msg = data['message']
+            msg = data.get('message', {})
             
             # Fallback: If 'tool_calls' is empty but 'content' looks like JSON, try to parse it
-            if not msg.get('tool_calls') and msg.get('content'):
-                content = msg['content'].strip()
-                
                 # Strip trailing quotes or messy closures
                 while content.endswith('"') or content.endswith("'"):
                     content = content[:-1].strip()
@@ -523,7 +557,17 @@ class AtQueryDockWidget(QtWidgets.QDockWidget):
             QgsMessageLog.logMessage(f"Executing tool: {name} with args: {args}", "AtQuery", 0)
 
             # --- Tool Dispatch ---
-            if name == 'QgsProject_mapLayers':
+            if name == 'get_toolbox_catalog':
+                from ..core.ai_brain import TOOLBOXES
+                catalog = {name: len(skills) for name, skills in TOOLBOXES.items()}
+                return json.dumps({"available_toolboxes": catalog, "instruction": "Use load_toolbox_skills to see functions in a toolbox."})
+
+            elif name == 'load_toolbox_skills':
+                toolbox_name = args.get('toolbox_name')
+                skills = get_toolbox_skills(toolbox_name)
+                return json.dumps(skills)
+
+            elif name == 'QgsProject_mapLayers':
                 layers = QgsProject.instance().mapLayers().values()
                 layer_names = [str(l.name()) for l in layers]
                 return json.dumps({"layers": layer_names})
@@ -648,6 +692,63 @@ class AtQueryDockWidget(QtWidgets.QDockWidget):
                 except Exception as e:
                     return json.dumps({"error": f"Buffer algorithm failed: {str(e)}"})
 
+            elif name == 'processing_run_native_clip':
+                params = {
+                    'INPUT': args.get('input_layer'),
+                    'OVERLAY': args.get('overlay_layer'),
+                    'OUTPUT': args.get('output', 'memory:')
+                }
+                return self._run_processing_alg('native:clip', params)
+
+            elif name == 'processing_run_gdal_slope':
+                params = {
+                    'INPUT': args.get('INPUT'),
+                    'OUTPUT': args.get('OUTPUT', 'memory:')
+                }
+                return self._run_processing_alg('gdal:slope', params)
+
+            elif name == 'processing_run_gdal_hillshade':
+                params = {
+                    'INPUT': args.get('INPUT'),
+                    'Z_FACTOR': args.get('Z_FACTOR', 1),
+                    'AZIMUTH': args.get('AZIMUTH', 315),
+                    'V_ANGLE': args.get('V_ANGLE', 45),
+                    'OUTPUT': 'memory:'
+                }
+                return self._run_processing_alg('gdal:hillshade', params)
+
+            elif name == 'processing_run_native_centroids':
+                params = {
+                    'INPUT': args.get('INPUT'),
+                    'OUTPUT': args.get('OUTPUT', 'memory:')
+                }
+                return self._run_processing_alg('native:centroids', params)
+
+            elif name == 'processing_run_native_dissolve':
+                params = {
+                    'INPUT': args.get('INPUT'),
+                    'FIELD': args.get('FIELD', []),
+                    'OUTPUT': 'memory:'
+                }
+                return self._run_processing_alg('native:dissolve', params)
+
+            elif name == 'QgsVectorLayer_startEditing':
+                layer_name = args.get('layer_name')
+                layer = self._get_layer_by_name(layer_name)
+                if layer:
+                    layer.startEditing()
+                    return json.dumps({"status": "success", "message": f"Editing started for {layer_name}"})
+                return json.dumps({"error": f"Layer {layer_name} not found"})
+
+            elif name == 'QgsVectorLayer_commitChanges':
+                layer_name = args.get('layer_name')
+                layer = self._get_layer_by_name(layer_name)
+                if layer:
+                    if layer.commitChanges():
+                        return json.dumps({"status": "success", "message": f"Changes committed for {layer_name}"})
+                    return json.dumps({"error": f"Failed to commit changes for {layer_name}"})
+                return json.dumps({"error": f"Layer {layer_name} not found"})
+
             elif name == 'QgsVectorLayer_createMemoryLayer':
                 layer_name = args.get('layer_name', 'BoundingBox')
                 extent_str = args.get('extent', '@map_extent')
@@ -715,6 +816,11 @@ class AtQueryDockWidget(QtWidgets.QDockWidget):
                 
                 if not algorithm_id:
                     return json.dumps({"error": "Missing required argument: 'algorithm_id'"})
+
+                # --- SECURITY CHECK ---
+                dangerous_terms = ['delete', 'remove', 'drop', 'format', 'truncate', 'sql:execute']
+                if any(term in algorithm_id.lower() for term in dangerous_terms):
+                    return json.dumps({"error": f"Security violation: Algorithm '{algorithm_id}' is restricted for safety reasons."})
 
                 # Handle layer names in parameters - convert string names to layer objects
                 processed_params = {}
