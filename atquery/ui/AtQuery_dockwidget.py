@@ -6,6 +6,7 @@ import traceback
 import os
 import tempfile
 import time
+import re
 from datetime import datetime
 
 from qgis.PyQt import QtWidgets, QtCore
@@ -35,7 +36,7 @@ from ..utils.installer_utils import (
     launch_installer
 )
 
-from ..core.ai_brain import get_base_tools, get_toolbox_skills, get_system_prompt
+from ..core.ai_brain import get_base_tools, get_toolbox_skills, get_system_prompt, identify_toolboxes
 
 # --- Installer Thread ---
 class InstallerThread(QtCore.QThread):
@@ -84,6 +85,10 @@ class AtQueryDockWidget(QtWidgets.QDockWidget):
         self.model_name = "qwen2.5:3b"
         self.conversation_history = []
         
+        # Resolve logo path
+        self.plugin_dir = os.path.dirname(os.path.dirname(__file__))
+        self.logo_path = os.path.join(self.plugin_dir, "resources", "Icon_AtQuery.jpg")
+        
         self.main_widget = QtWidgets.QWidget()
         self.layout_stack = QtWidgets.QStackedLayout(self.main_widget)
         self.setWidget(self.main_widget)
@@ -92,29 +97,50 @@ class AtQueryDockWidget(QtWidgets.QDockWidget):
         self._setup_chat_view()
         self.check_ollama_status()
         
+        # Set Window Icon
+        self.setWindowIcon(QtWidgets.QIcon(self.logo_path))
+        
     def set_iface(self, iface):
         self.iface = iface
         
     def _setup_ollama_status_view(self):
         self.ollama_status_widget = QtWidgets.QWidget()
         layout = QtWidgets.QVBoxLayout(self.ollama_status_widget)
-        title = QtWidgets.QLabel("<h1><span style='color: #4CAF50;'>AtQuery</span> Setup Required</h1>")
-        title.setAlignment(QtCore.Qt.AlignCenter)
+        
+        # Logo + Title
+        title_layout = QtWidgets.QHBoxLayout()
+        logo_label = QtWidgets.QLabel()
+        logo_pix = QtWidgets.QPixmap(self.logo_path).scaled(64, 64, QtCore.Qt.KeepAspectRatio, QtCore.Qt.SmoothTransformation)
+        logo_label.setPixmap(logo_pix)
+        title_label = QtWidgets.QLabel("<h1><span style='color: #4CAF50;'>AtQuery</span></h1>")
+        title_layout.addStretch()
+        title_layout.addWidget(logo_label)
+        title_layout.addWidget(title_label)
+        title_layout.addStretch()
+        
+        subtitle = QtWidgets.QLabel("<h3>Setup Required</h3>")
+        subtitle.setAlignment(QtCore.Qt.AlignCenter)
+        
         message = QtWidgets.QLabel("<p>To use the AI Chat, you need to run the <a href='https://ollama.com'>Ollama</a> local LLM server.</p>")
         message.setWordWrap(True)
         message.setAlignment(QtCore.Qt.AlignCenter)
         message.setOpenExternalLinks(True)
+        
         self.status_label = QtWidgets.QLabel("Status: Checking Ollama API...")
         self.status_label.setAlignment(QtCore.Qt.AlignCenter)
+        
         self.install_button = QtWidgets.QPushButton("Download Ollama Installer")
         self.install_button.clicked.connect(self._start_download)
         self.install_button.setStyleSheet("background-color: #007BFF; color: white; padding: 10px; font-weight: bold;")
+        
         self.status_progress = QtWidgets.QProgressBar()
         self.status_progress.setRange(0, 100)
         self.status_progress.setVisible(False)
-        layout.addWidget(title)
-        layout.addWidget(message)
+        
+        layout.addLayout(title_layout)
+        layout.addWidget(subtitle)
         layout.addSpacing(20)
+        layout.addWidget(message)
         layout.addWidget(self.status_label)
         layout.addWidget(self.status_progress)
         layout.addWidget(self.install_button)
@@ -125,9 +151,22 @@ class AtQueryDockWidget(QtWidgets.QDockWidget):
         self.chat_widget = QtWidgets.QWidget()
         layout = QtWidgets.QVBoxLayout(self.chat_widget)
         layout.setContentsMargins(5, 5, 5, 5)
+        
         self.chat_display = QtWidgets.QTextEdit()
         self.chat_display.setReadOnly(True)
-        self.chat_display.setText("Welcome to AtQuery! Ask a question about your QGIS project.\n(e.g., 'What layers are in the project?')\n")
+        
+        # Welcome with Logo
+        welcome_html = f"""
+        <div style='text-align: center; margin-bottom: 10px;'>
+            <img src='{self.logo_path}' width='50' height='50'><br>
+            <b style='font-size: 16px; color: #4CAF50;'>AtQuery by Adela C</b><br>
+            <i>Your Agentic GIS Assistant</i>
+        </div>
+        <hr>
+        Welcome! Ask a question about your QGIS project.<br>
+        (e.g., 'What layers are in the project?')<br>
+        """
+        self.chat_display.setHtml(welcome_html)
         self.user_input = QtWidgets.QLineEdit()
         self.user_input.setPlaceholderText("Enter your PyQGIS request...")
         self.user_input.returnPressed.connect(self._send_query)
@@ -194,9 +233,17 @@ class AtQueryDockWidget(QtWidgets.QDockWidget):
         current_turn_history = [{"role": "user", "content": user_text}]
         active_tools = get_base_tools()
         
+        # Pre-load toolboxes based on keywords to save a turn
+        detected = identify_toolboxes(user_text)
+        for tb in detected:
+            skills = get_toolbox_skills(tb)
+            if skills:
+                active_tools.extend(skills)
+        
         try:
-            for step in range(10):
-                combined_history = self.conversation_history[-10:] + current_turn_history
+            for step in range(5): # Limit to 5 steps per turn
+                # Limit context to last 6 messages (3 turns) + current turn to keep it FAST
+                combined_history = self.conversation_history[-6:] + current_turn_history
                 ai_msg = self._get_ai_response(combined_history, active_tools)
                 current_turn_history.append(ai_msg)
 
@@ -215,7 +262,7 @@ class AtQueryDockWidget(QtWidgets.QDockWidget):
                     tool_outputs.append({"role": "tool", "content": output, "tool_call_id": tc.get("id")})
                 current_turn_history.extend(tool_outputs)
             else:
-                self.handle_ai_response("Task timed out.")
+                self.handle_ai_response("Operation finished (maximum steps reached).")
             self.conversation_history.extend(current_turn_history)
         except Exception as e:
             self.chat_display.append(f"<br><b>Error:</b> {str(e)}")
@@ -225,93 +272,125 @@ class AtQueryDockWidget(QtWidgets.QDockWidget):
             self.user_input.setFocus()
 
     def _get_ai_response(self, messages, tools):
-        sanitized_messages = []
-        prefixes = ["AtQuery:", "User:", "Answer:", "Response:", "Thought:", "Assistant:"]
-        for msg in messages:
-            new_msg = msg.copy()
-            if msg.get('role') == 'assistant' and msg.get('content'):
-                content = msg['content'].strip()
-                for p in prefixes:
-                    if content.lower().startswith(p.lower()): content = content[len(p):].strip()
-                new_msg['content'] = content
-            sanitized_messages.append(new_msg)
+        # Concise sanitization
+        sanitized = []
+        for m in messages:
+            nm = m.copy()
+            if m.get('role') == 'assistant' and m.get('content'):
+                nm['content'] = re.sub(r'^(AtQuery|User|Answer|Response|Thought|Assistant):\s*', '', m['content'], flags=re.I).strip()
+            sanitized.append(nm)
 
         payload = {
             "model": self.model_name,
-            "messages": [{"role": "system", "content": get_system_prompt()}] + sanitized_messages,
+            "messages": [{"role": "system", "content": get_system_prompt()}] + sanitized,
             "tools": tools,
             "stream": False,
-            "options": {"temperature": 0.1, "num_predict": 500}
+            "options": {"temperature": 0.0, "num_predict": 400} # Lower temp for speed/consistency
         }
         
         try:
-            resp = requests.post(self.ollama_url, json=payload, timeout=90)
+            resp = requests.post(self.ollama_url, json=payload, timeout=60)
             resp.raise_for_status()
             msg = resp.json().get('message', {})
             content = msg.get('content', '')
             if '{' in content:
                 try:
-                    start = content.find('{')
-                    end = content.rfind('}') + 1
+                    start, end = content.find('{'), content.rfind('}') + 1
                     data = json.loads(content[start:end])
                     if 'content' in data: msg['content'] = data['content']
                     if 'suggested_queries' in data: msg['suggested_queries'] = data['suggested_queries']
                     if 'tool_calls' in data:
-                        raw = data['tool_calls']
                         normalized = []
-                        for c in raw:
-                            func = c.get('function', c)
-                            args = func.get('arguments', func.get('parameters', {}))
+                        for c in data['tool_calls']:
+                            f = c.get('function', c)
                             normalized.append({
                                 "id": c.get('id', f"call_{time.time_ns()}"),
                                 "type": "function",
-                                "function": {"name": str(func.get('name', '')), "arguments": args}
+                                "function": {"name": str(f.get('name', '')), "arguments": f.get('arguments', f.get('parameters', {}))}
                             })
                         msg['tool_calls'] = normalized
                 except: pass
             return msg
-        except Exception as e:
-            raise Exception(f"Ollama Error: {e}")
+        except Exception as e: raise Exception(f"Ollama Error: {e}")
 
     def handle_tool_call(self, tool_call_json):
         try:
             tc = json.loads(tool_call_json)
             func = tc.get("function", {})
-            name = func.get("name")
-            args = func.get("arguments", {})
+            name, args = func.get("name"), func.get("arguments", {})
             
-            if name == 'get_toolbox_catalog':
-                from ..core.ai_brain import _load_catalog_from_md
-                catalog = _load_catalog_from_md()
-                return json.dumps(catalog)
-            elif name == 'load_toolbox_skills':
+            # Special case for core management tools
+            if name == 'load_toolbox_skills':
                 return json.dumps(get_toolbox_skills(args.get('toolbox_name')))
-            elif name == 'QgsProject_mapLayers':
-                return json.dumps({"layers": [l.name() for l in QgsProject.instance().mapLayers().values()]})
-            elif name == 'QgsVectorLayer_fields':
-                layer = self._resolve_layer(args.get('layer_name'))
-                if layer: return json.dumps({"fields": [f.name() for f in layer.fields()]})
-                return json.dumps({"error": "Layer not found"})
-            elif name == 'QgsVectorLayer_selectByExpression':
-                layer = self._resolve_layer(args.get('layer_name'))
-                if layer:
-                    layer.selectByExpression(args.get('sql'))
-                    if layer.selectedFeatureCount() > 0: self.iface.mapCanvas().zoomToSelected(layer)
-                    return json.dumps({"status": "selected", "count": layer.selectedFeatureCount()})
-            elif name == 'processing_run_native_buffer':
-                layer = self._resolve_layer(args.get('layer_name'))
-                if layer:
-                    res = processing.run("native:buffer", {'INPUT': layer, 'DISTANCE': args.get('distance'), 'OUTPUT': 'memory:'})
-                    QgsProject.instance().addMapLayer(res['OUTPUT'])
-                    return json.dumps({"status": "success"})
-            # ... other tools ...
-            return json.dumps({"error": "Tool not implemented"})
-        except Exception as e: return json.dumps({"error": str(e)})
+            
+            # Dynamic Execution for all other tools
+            from ..core.ai_brain import get_implementation
+            code = get_implementation(name)
+            
+            if code:
+                # Prepare context for the dynamic code
+                local_context = {
+                    'self': self,
+                    'args': args,
+                    'QgsProject': QgsProject,
+                    'QgsRectangle': QgsRectangle,
+                    'QgsGeometry': QgsGeometry,
+                    'QgsFeature': QgsFeature,
+                    'QgsFields': QgsFields,
+                    'processing': processing,
+                    'json': json,
+                    'result': None
+                }
+                
+                # Execute the implementation code from Markdown
+                exec(code, globals(), local_context)
+                
+                # Retrieve the result set by the code
+                return json.dumps(local_context['result']) if local_context['result'] is not None else json.dumps({"status": "success"})
+            
+            return json.dumps({"error": f"Implementation for tool '{name}' not found."})
+            
+        except Exception as e:
+            QgsMessageLog.logMessage(f"AtQuery Error: {traceback.format_exc()}", "AtQuery")
+            return json.dumps({"error": str(e)})
 
     def _resolve_layer(self, name):
         if not name: return None
+        all_layers = list(QgsProject.instance().mapLayers().values())
+        
+        # 1. Try exact match
         matches = QgsProject.instance().mapLayersByName(name)
-        return matches[0] if matches else None
+        if matches: return matches[0]
+        
+        # 2. Normalize and try Exact Normalized Match
+        def normalize(s):
+            return re.sub(r'[^a-z0-9]', '', s.lower())
+        
+        target = normalize(name)
+        if not target: return None
+        
+        for layer in all_layers:
+            if normalize(layer.name()) == target:
+                return layer
+                
+        # 3. Best "Contains" Match (Prioritize original layers over buffers/bboxes)
+        potential_matches = []
+        for layer in all_layers:
+            layer_norm = normalize(layer.name())
+            if target in layer_norm:
+                # Rank by how close the name is to the target
+                score = len(layer_norm) - len(target)
+                # Penalize memory layers (likely outputs of previous steps)
+                if layer.dataProvider().name() == 'memory':
+                    score += 100
+                potential_matches.append((score, layer))
+        
+        if potential_matches:
+            # Return the match with the lowest score (closest name, non-memory preferred)
+            potential_matches.sort(key=lambda x: x[0])
+            return potential_matches[0][1]
+            
+        return None
 
     def handle_ai_response(self, text, suggested=None):
         cleaned = text.strip()

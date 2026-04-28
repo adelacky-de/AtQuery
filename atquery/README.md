@@ -1,6 +1,7 @@
 # AtQuery: AI-Powered QGIS Agent
+**Created by Adela C**
 
-AtQuery is a QGIS plugin that brings the power of Large Language Models (LLMs) directly into your GIS workflow. It translates natural language instructions into precise PyQGIS commands and geoprocessing tasks using a local Ollama server.
+AtQuery is a next-generation QGIS plugin that integrates Large Language Models (LLMs) directly into the GIS workspace. By transforming natural language into executable PyQGIS logic, AtQuery allows users to perform complex spatial analysis, data inspection, and geoprocessing through a simple, conversational interface—all powered by a private, local Ollama server.
 
 ## 🚀 Key Features
 

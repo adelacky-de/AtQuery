@@ -1,14 +1,15 @@
-# DataInspection Toolbox
-Keywords: fields, attributes, columns, crs, projection, coordinate system
+# Toolbox: DataInspection
 
-## QgsVectorLayer_fields
-- **Description**: Retrieves field names for a specific layer.
-- **Keywords**: list fields, layer attributes, column names, what fields
+Detailed metadata about layers, their fields, attributes, and Coordinate Reference Systems.
+
+### Tool: QgsVectorLayer_fields
+- **Description**: Lists all field names and types for a given layer.
+- **Keywords**: list fields, show attributes, columns, schema
 - **Schema**:
 ```json
 {
     "name": "QgsVectorLayer_fields",
-    "description": "Retrieves field names for a specific layer.",
+    "description": "Returns a list of field names for the specified layer.",
     "parameters": {
         "type": "object",
         "properties": {
@@ -18,8 +19,16 @@ Keywords: fields, attributes, columns, crs, projection, coordinate system
     }
 }
 ```
+- **Implementation**:
+```python
+layer = self._resolve_layer(args['layer_name'])
+if layer:
+    result = {"fields": [f.name() for f in layer.fields()]}
+else:
+    result = {"error": "Layer not found"}
+```
 
-## QgsVectorLayer_crs
+### Tool: QgsVectorLayer_crs
 - **Description**: Returns the Coordinate Reference System (CRS) of a layer.
 - **Keywords**: layer crs, layer projection, check projection, coordinate system
 - **Schema**:
@@ -35,4 +44,12 @@ Keywords: fields, attributes, columns, crs, projection, coordinate system
         "required": ["layer_name"]
     }
 }
+```
+- **Implementation**:
+```python
+layer = self._resolve_layer(args['layer_name'])
+if layer:
+    result = {"crs": layer.crs().authid(), "description": layer.crs().description()}
+else:
+    result = {"error": "Layer not found"}
 ```
