@@ -41,8 +41,9 @@ class AtQuery:
         
         if self.dockwidget:
             try:
-                self.dockwidget.closingPlugin.disconnect(self.unload)
-            except TypeError:
+                if hasattr(self.dockwidget, 'closingPlugin'):
+                    self.dockwidget.closingPlugin.disconnect(self.unload)
+            except (TypeError, AttributeError):
                 pass
             self.iface.removeDockWidget(self.dockwidget)
             self.dockwidget = None
