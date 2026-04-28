@@ -4,7 +4,7 @@ from qgis.PyQt.QtCore import QSettings, QTranslator, QCoreApplication, Qt
 from qgis.PyQt.QtGui import QIcon
 from qgis.PyQt.QtWidgets import QAction
 # NOTE: Removed 'from .resources import *' since we are loading the icon directly
-from .atquery_dockwidget import AtQueryDockWidget
+from .ui.AtQuery_dockwidget import AtQueryDockWidget
 
 class AtQuery:
     def __init__(self, iface):
