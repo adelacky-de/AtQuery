@@ -108,6 +108,9 @@ JSON FORMAT:
   "tool_calls": [...],
   "suggested_queries": ["Follow up 1", "Follow up 2"]
 }
+
+CONTEXT AWARENESS:
+- If the user refers to "this layer", "current layer", or "the active layer", ALWAYS call 'get_active_layer' first to identify it.
 """
 
 def get_system_prompt():

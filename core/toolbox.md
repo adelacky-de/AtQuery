@@ -4,7 +4,7 @@ Use this catalog to identify which toolbox contains the skills needed for a user
 
 | Toolbox | Keywords | Description |
 | :--- | :--- | :--- |
-| **ProjectDiscovery** | layers, extent, project, map, list, what is in | Basic project awareness and map metadata. |
+| **ProjectDiscovery** | layers, extent, project, map, list, what is in, current layer, active layer | Basic project awareness and map metadata. |
 | **DataInspection** | fields, attributes, columns, crs, projection, coordinate system | Detailed metadata about layers and their structures. |
 | **SelectionTools** | select, filter, query, where, expression, location, intersect, contains | Spatial and attribute-based selection. |
 | **LayerStyling** | color, style, symbology, renderer, appearance, zoom, transparency | Changing how layers look on the map. |

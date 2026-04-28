@@ -36,3 +36,21 @@ result = {"layers": layers, "count": len(layers)}
 ext = self.iface.mapCanvas().extent()
 result = {"xmin": ext.xMinimum(), "ymin": ext.yMinimum(), "xmax": ext.xMaximum(), "ymax": ext.yMaximum()}
 ```
+### Tool: get_active_layer
+- **Description**: Returns the name and type of the currently selected (active) layer in QGIS.
+- **Schema**:
+```json
+{
+    "name": "get_active_layer",
+    "description": "Returns the name of the currently active/selected layer in the QGIS layer tree.",
+    "parameters": {"type": "object", "properties": {}}
+}
+```
+- **Implementation**:
+```python
+layer = self.iface.activeLayer()
+if layer:
+    result = {"name": layer.name(), "type": "vector" if layer.type() == 0 else "raster"}
+else:
+    result = {"error": "No active layer selected."}
+```
