@@ -1,23 +1,79 @@
-# AtQuery: AI-Powered QGIS Agent
-**Created by Adela C**
+# 🌍 AtQuery: The Agentic QGIS Assistant
 
-AtQuery is a next-generation QGIS plugin that integrates Large Language Models (LLMs) directly into the GIS workspace. By transforming natural language into executable PyQGIS logic, AtQuery allows users to perform complex spatial analysis, data inspection, and geoprocessing through a simple, conversational interface—all powered by a private, local Ollama server.
+**AtQuery** is a high-performance QGIS plugin that brings the power of Agentic AI directly to your geospatial workspace. By bridging the gap between natural language and **PyQGIS**, AtQuery allows you to query, analyze, and automate GIS workflows without writing a single line of code.
+
+---
 
 ## 🚀 Key Features
 
-- **Natural Language Control**: Query layers, filter attributes, and run spatial analysis using plain English.
-- **Dynamic Skill Library**: Uses a modular, keyword-indexed system. The AI identifies the correct GIS "Handbook" (Toolbox) and loads only the specific skills needed.
-- **Self-Executing Toolboxes**: Python implementation is stored directly in Markdown files, allowing the AI to execute complex GIS logic dynamically.
-- **Proactive GIS Assistant**: Automatically zooms to selections, repaints layers, and handles multi-step reasoning.
-- **Expanded GIS Library**: Supports Vector processing, **Raster Analysis**, **Web Services**, and **Terrain Analysis**.
+- **Natural Language GIS**: No more searching through menus. Ask QGIS questions like "Where are the schools?" or commands like "Buffer the parks by 100m."
+*   **Agentic Reasoning (Mini-MCP)**: Powered by a dynamic tool-calling loop. The AI checks your layers, inspects their attributes, and chooses the right GIS tool autonomously.
+*   **Local & Private**: Runs entirely on your machine using **Ollama**. Your data never leaves your computer, ensuring total privacy and zero API costs.
+*   **Modular Skill Library**: Capabilities are organized into "Toolboxes" (Markdown files). The system only loads the skills relevant to your specific request.
+*   **Live Code Execution**: See the AI's generated PyQGIS code in real-time. It's not just an assistant; it's a way to learn PyQGIS.
 
-## 🛠️ Installation
+---
 
-1. Clone or download this repository.
-2. Copy the `atquery` folder to your QGIS plugins directory.
-3. Ensure you have [Ollama](https://ollama.com) installed and running locally.
-4. Download the `qwen2.5:3b` model: `ollama run qwen2.5:3b`.
+## 📖 Prompt Examples
 
-## 📄 License
+AtQuery can handle a wide variety of tasks. Here are some things you can try:
 
-This project is licensed under the MIT License.
+### 🔍 Project Discovery & Data Inspection
+- *"List all the layers in my map."*
+- *"What are the attribute fields in the 'Counties' layer?"*
+- *"Show me the coordinate system of the active layer."*
+
+### 🎯 Selection & Filtering
+- *"Select all buildings with more than 5 floors in the 'structures' layer."*
+- *"Filter the 'Rivers' layer to only show the ones with 'Danube' in the name."*
+- *"Find all parcels that intersect with the current selection."*
+
+### 🎨 Layer Styling
+- *"Change the color of the 'Forests' layer to dark green."*
+- *"Set the transparency of the 'Satellite' layer to 50%."*
+
+### ⚙️ Vector & Raster Analysis
+- *"Create a 500-meter buffer around the selected bus stops."*
+- *"Calculate the slope from the 'DEM' raster layer."*
+- *"Clip the 'roads' layer using the 'boundary' polygon."*
+
+---
+
+## 🛠️ Installation & Setup
+
+### 1. Plugin Installation
+1.  Download or clone this repository.
+2.  Copy the folder into your QGIS plugins directory:
+    - **Windows**: `%AppData%\QGIS\QGIS3\profiles\default\python\plugins\`
+    - **macOS**: `~/Library/Application Support/QGIS/QGIS3/profiles/default/python/plugins/`
+    - **Linux**: `~/.local/share/QGIS/QGIS3/profiles/default/python/plugins/`
+3.  Restart QGIS and enable **AtQuery** in the Plugin Manager.
+
+### 2. AI Backend (Ollama)
+AtQuery requires **Ollama** to be running locally as the inference engine.
+1.  Download and install [Ollama](https://ollama.com).
+2.  Pull the default model (AtQuery is optimized for Qwen 2.5):
+    ```bash
+    ollama run qwen2.5:3b
+    ```
+3.  Ensure Ollama is running (`http://localhost:11434`) before launching the plugin.
+
+---
+
+## 🏗️ Technical Architecture
+
+AtQuery uses a **Dynamic Skill Library** architecture:
+- **`core/toolbox.md`**: The master catalog of all available skillsets.
+- **`core/toolboxes/`**: Modular Markdown files containing tool schemas (JSON) and their PyQGIS implementations.
+- **Agent Loop**: When you type a query, the agent identifies the required toolbox, loads the specific functions into its memory, and executes them in a multi-step reasoning loop.
+
+---
+
+## 👤 Credits & Support
+
+**AtQuery** was created by **Adela C**. 
+
+- **Repository**: [https://github.com/adelacky-de/atquery](https://github.com/adelacky-de/atquery)
+- **Issues**: Report bugs or request features on the [Issue Tracker](https://github.com/adelacky-de/atquery/issues).
+
+*Transforming GIS from a tool you operate into a partner you converse with.*
