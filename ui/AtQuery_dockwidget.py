@@ -92,7 +92,7 @@ class AtQueryDockWidget(QtWidgets.QDockWidget):
         self.chat_display.setReadOnly(True)
         
         welcome_html = f"""
-        <div style='text-align: center; margin-bottom: 10px;'>
+        <div style='text-align: left; margin-bottom: 10px;'>
             <img src='file://{self.logo_path}' width='50' height='50'><br>
             <b style='font-size: 16px; color: #4CAF50;'>AtQuery by Adela C</b><br>
             <i>Your Agentic GIS Assistant</i>
