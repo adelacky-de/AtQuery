@@ -30,3 +30,33 @@ if layer:
 else:
     result = {"error": "Layer not found"}
 ```
+### Tool: extract_selected_features
+- **Description**: Creates a new memory layer from the currently selected features of a layer.
+- **Schema**:
+```json
+{
+    "name": "extract_selected_features",
+    "description": "Extracts the selected features from a layer into a new memory layer.",
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "layer_name": {"type": "string", "description": "Name of the source layer."}
+        },
+        "required": ["layer_name"]
+    }
+}
+```
+- **Implementation**:
+```python
+import processing
+layer = self._resolve_layer(args['layer_name'])
+if layer:
+    if layer.selectedFeatureCount() == 0:
+        result = {"error": "No features selected in layer."}
+    else:
+        res = processing.run("native:saveselectedfeatures", {'INPUT': layer, 'OUTPUT': 'memory:'})
+        QgsProject.instance().addMapLayer(res['OUTPUT'])
+        result = {"status": "success", "new_layer": res['OUTPUT'].name()}
+else:
+    result = {"error": "Layer not found"}
+```

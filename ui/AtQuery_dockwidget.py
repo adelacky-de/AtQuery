@@ -123,6 +123,8 @@ class AtQueryDockWidget(QtWidgets.QDockWidget):
         
         self.chat_display.append(f"<br><b>You:</b> {user_text}")
         self.user_input.clear()
+        self.chat_display.append("<i>AtQuery is thinking...</i>")
+        QtWidgets.QApplication.processEvents()
         
         current_turn_history = [{"role": "user", "content": user_text}]
         active_tools = get_base_tools()
@@ -140,7 +142,13 @@ class AtQueryDockWidget(QtWidgets.QDockWidget):
                 current_turn_history.append(ai_msg)
 
                 if not ai_msg.get("tool_calls"):
-                    self.handle_ai_response(ai_msg.get("content", ""), ai_msg.get("suggested_queries"))
+                    content = ai_msg.get("content", "").strip()
+                    if not content and step > 0:
+                        content = "Action completed successfully."
+                    elif not content:
+                        content = "I'm sorry, I couldn't process that request. Please try again."
+                    
+                    self.handle_ai_response(content, ai_msg.get("suggested_queries"))
                     break
 
                 tool_outputs = []
@@ -246,6 +254,13 @@ class AtQueryDockWidget(QtWidgets.QDockWidget):
         return None
 
     def handle_ai_response(self, text, suggested=None):
+        # Remove 'Thinking...' indicator
+        cursor = self.chat_display.textCursor()
+        cursor.movePosition(QtGui.QTextCursor.End)
+        cursor.select(QtGui.QTextCursor.BlockUnderCursor)
+        if "AtQuery is thinking..." in cursor.selectedText():
+            cursor.removeSelectedText()
+        
         self.chat_display.append(f"<br><b>AtQuery:</b> {text}")
         if suggested:
             for q in suggested:
