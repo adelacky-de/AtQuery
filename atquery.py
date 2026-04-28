@@ -49,7 +49,7 @@ class AtQuery:
 
     def run(self):
         if self.first_start:
-            self.dockwidget = AtQueryDockWidget()
+            self.dockwidget = AtQueryDockWidget(self.iface.mainWindow())
             
             # CRITICAL FIX: Pass the interface to the dock widget
             self.dockwidget.set_iface(self.iface) 
