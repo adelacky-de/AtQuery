@@ -1,5 +1,0 @@
-<RCC>
-    <qresource prefix="/plugins/atquery" >
-        <file>Icon_AtQuery.jpg</file>
-    </qresource>
-</RCC>
