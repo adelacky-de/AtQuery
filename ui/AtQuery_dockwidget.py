@@ -17,6 +17,8 @@ import processing
 from ..core.ai_brain import get_base_tools, get_toolbox_skills, get_system_prompt, identify_toolboxes
 
 class AtQueryDockWidget(QtWidgets.QDockWidget):
+    closingPlugin = QtCore.pyqtSignal()
+
     def __init__(self, parent=None):
         super(AtQueryDockWidget, self).__init__(parent)
         self.setWindowTitle("AtQuery AI Agent")
@@ -248,3 +250,7 @@ class AtQueryDockWidget(QtWidgets.QDockWidget):
         if suggested:
             for q in suggested:
                 self.chat_display.append(f" - <a href='#'>{q}</a>")
+
+    def closeEvent(self, event):
+        self.closingPlugin.emit()
+        event.accept()
