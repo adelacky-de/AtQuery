@@ -28,7 +28,7 @@ class AtQueryDockWidget(QtWidgets.QDockWidget):
         
         # Resolve logo path
         self.plugin_dir = os.path.dirname(os.path.dirname(__file__))
-        self.logo_path = os.path.join(self.plugin_dir, "resources", "Icon_AtQuery.jpg")
+        self.logo_path = os.path.join(self.plugin_dir, "Icon_AtQuery.jpg")
         
         self.main_widget = QtWidgets.QWidget()
         self.layout_stack = QtWidgets.QStackedLayout(self.main_widget)
@@ -40,6 +40,10 @@ class AtQueryDockWidget(QtWidgets.QDockWidget):
         
         # Set Window Icon
         self.setWindowIcon(QtGui.QIcon(self.logo_path))
+
+    def set_iface(self, iface):
+        """Sets the QGIS interface reference."""
+        self.iface = iface
         
     def _setup_ollama_status_view(self):
         self.ollama_status_widget = QtWidgets.QWidget()
@@ -206,7 +210,8 @@ class AtQueryDockWidget(QtWidgets.QDockWidget):
                     'self': self, 'args': args, 'QgsProject': QgsProject, 
                     'QgsRectangle': QgsRectangle, 'QgsGeometry': QgsGeometry, 
                     'QgsFeature': QgsFeature, 'QgsFields': QgsFields,
-                    'processing': processing, 'json': json, 'result': None
+                    'processing': processing, 'json': json, 'result': None,
+                    'iface': self.iface, 'canvas': self.iface.mapCanvas()
                 }
                 exec(code, globals(), local_context)
                 return json.dumps(local_context['result']) if local_context['result'] is not None else json.dumps({"status": "success"})

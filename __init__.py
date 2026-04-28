@@ -32,5 +32,5 @@ def classFactory(iface):  # pylint: disable=invalid-name
     :type iface: QgsInterface
     """
     #
-    from .AtQuery import AtQuery
+    from .atquery import AtQuery
     return AtQuery(iface)
