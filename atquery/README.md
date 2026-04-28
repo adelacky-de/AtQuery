@@ -4,11 +4,12 @@ AtQuery is a QGIS plugin that brings the power of Large Language Models (LLMs) d
 
 ## 🚀 Key Features
 
-- **Natural Language Control**: Query your layers, filter attributes, and run spatial analysis using plain English.
-- **Privacy-First (Local AI)**: Powered by [Ollama](https://ollama.com/), all data stays on your machine. No cloud dependencies or API keys required.
-- **Skilling Framework**: Uses a dynamic **Toolbox** system. The AI identifies and loads only the necessary skills for your request, maximizing efficiency and reasoning accuracy.
-- **High Performance**: Optimized for Apple Silicon (M1/M2/M3/M4/M5) using the **`qwen2.5:3b`** model for rapid reasoning and low memory overhead.
-- **Interactive Chat**: A docked panel within QGIS for seamless interaction.
+- **Natural Language Control**: Query layers, filter attributes, and run spatial analysis using plain English.
+- **Dictionary-Style Toolbox**: Uses a modular, keyword-indexed system. The AI identifies the correct GIS "Handbook" (Toolbox) and loads only the specific skills needed, optimizing reasoning for small models like `qwen2.5:3b`.
+- **Proactive Fallback Loop**: If the AI is uncertain, it proactively asks: *"Do you want to [action]?"*. It executes only after your confirmation (**"Y/YES"**), ensuring safety and precision.
+- **Expanded GIS Library**: Supports Vector processing, **Raster Analysis** (Slope, Hillshade), **Web Services** (WMS/WFS/XYZ Tiles), and **Terrain Analysis** (TIN, Contours).
+- **Privacy-First (Local AI)**: Powered by [Ollama](https://ollama.com/), all data stays on your machine.
+- **High Performance**: Optimized for rapid reasoning with low memory overhead.
 
 ## 🛠️ Installation
 
@@ -32,16 +33,24 @@ ollama pull qwen2.5:3b
 
 ## 📖 Usage Examples
 
-- **Discovery**: "What layers do I have in my project?"
-- **Filtering**: "Select all districts with population over 50,000."
-- **Styling**: "Make the 'roads' layer red."
-- **Analysis**: "Create a 500-meter buffer around the hospitals layer."
-- **Spatial Queries**: "Which points of interest are inside the 'Central' district?"
+- **Discovery**: "What layers are in the project?"
+- **Filtering**: "Select districts where NAME_EN is 'Southern'."
+- **Analysis**: "Calculate slope from my elevation raster."
+- **Web Data**: "Add the OpenStreetMap basemap."
+- **3D/Terrain**: "Create a TIN interpolation for the points layer."
+
+## 🧪 Testing & Metrics
+
+You can run the automated self-test suite to verify the AI's reasoning and performance:
+```bash
+python3 test/test_brain_local.py --verbose
+```
+This will output a detailed dashboard including **Run Time**, **Keywords Identified**, **Toolbox Selected**, and **AI Reasoning Steps**.
 
 ## 🔒 Security & Safety
 
-AtQuery includes a security layer that restricts dangerous commands (e.g., file deletion or database dropping). However, it is always recommended to work on data backups when performing complex geoprocessing tasks.
+AtQuery includes a security layer that restricts dangerous commands (e.g., file deletion). The proactive fallback loop also ensures the AI confirms intent before executing significant geoprocessing tasks.
 
 ## 📄 License
 
-This project is licensed under the MIT License - see the LICENSE file for details.
+This project is licensed under the MIT License.
