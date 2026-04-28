@@ -54,7 +54,36 @@ layer = self._resolve_layer(args['layer_name'])
 if not layer:
     result = {"error": f"Layer '{args['layer_name']}' not found."}
 else:
-    layer.setOpacity(args['opacity'] / 100.0)
-    layer.triggerRepaint()
-    result = {"status": "success", "message": f"Opacity of '{layer.name()}' set to {args['opacity']}%"}
+    try:
+        val = float(args['opacity'])
+        layer.setOpacity(val / 100.0)
+        layer.triggerRepaint()
+        result = {"status": "success", "message": f"Opacity of '{layer.name()}' set to {val}%"}
+    except:
+        result = {"error": "Invalid opacity value. Must be a number."}
+
+### Tool: zoom_to_layer
+```json
+{
+  "name": "zoom_to_layer",
+  "description": "Zooms the map canvas to the extent of a specific layer.",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "layer_name": {"type": "string", "description": "The name of the layer to zoom to."}
+    },
+    "required": ["layer_name"]
+  }
+}
+```
+
+```python
+layer = self._resolve_layer(args['layer_name'])
+if layer:
+    self.iface.mapCanvas().setExtent(layer.extent())
+    self.iface.mapCanvas().refresh()
+    result = {"status": "success"}
+else:
+    result = {"error": "Layer not found"}
+```
 ```

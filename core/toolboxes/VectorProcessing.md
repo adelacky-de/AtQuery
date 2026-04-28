@@ -22,11 +22,27 @@ Core vector geoprocessing algorithms.
 - **Implementation**:
 ```python
 import processing
+from qgis.core import QgsUnitTypes
 layer = self._resolve_layer(args['layer_name'])
 if layer:
-    res = processing.run("native:buffer", {'INPUT': layer, 'DISTANCE': args['distance'], 'OUTPUT': 'memory:'})
+    dist = args['distance']
+    # Check if the layer uses degrees
+    if layer.crs().mapUnits() == QgsUnitTypes.DistanceDegrees:
+        # Very rough approximation for meters to degrees
+        dist = dist / 111319.9
+        
+    res = processing.run("native:buffer", {
+        'INPUT': layer, 
+        'DISTANCE': dist, 
+        'SEGMENTS': 5,
+        'END_CAP_STYLE': 0,
+        'JOIN_STYLE': 0,
+        'MITER_LIMIT': 2,
+        'DISSOLVE': False,
+        'OUTPUT': 'memory:'
+    })
     QgsProject.instance().addMapLayer(res['OUTPUT'])
-    result = {"status": "success", "layer_name": res['OUTPUT'].name()}
+    result = {"status": "success", "layer_name": res['OUTPUT'].name(), "distance_used": dist}
 else:
     result = {"error": "Layer not found"}
 ```
