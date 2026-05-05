@@ -5,24 +5,37 @@ AtQuery Web Synthesis Engine
 When a user query does not match any built-in toolbox, this module:
   1. Asks an Ollama LLM to synthesize a QGIS Python tool from its own knowledge.
   2. Saves the synthesized tool to community_toolbox.json.
-  3. Sends an email notification to the admin (adelacky.de@gmail.com).
+  3. Sends an email notification to Adela via Formspree (no user credentials needed).
 
-The LLM-synthesis approach (no external search key needed) is used by default.
+NOTE ON NOTIFICATIONS:
+  The email goes to the plugin AUTHOR (Adela), not the end user.
+  We use Formspree (https://formspree.io) as a free webhook relay:
+    - The plugin POSTs a JSON payload to YOUR Formspree form endpoint.
+    - Formspree emails YOU. No SMTP, no credentials, no .env needed by users.
+  
+  SETUP (one-time, by the developer):
+    1. Go to https://formspree.io and create a free account.
+    2. Create a new form → set email to adelacky.de@gmail.com.
+    3. Copy your form ID (looks like: xpwzknab).
+    4. Set FORMSPREE_FORM_ID below.
 """
 
 import os
 import json
 import re
 import time
-import smtplib
 import requests
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
 
 OLLAMA_URL = "http://localhost:11434/api/chat"
 MODEL_NAME = "qwen2.5:3b"
 NOTIFY_EMAIL = "adelacky.de@gmail.com"
 COMMUNITY_TOOLBOX_PATH = os.path.join(os.path.dirname(__file__), "community_toolbox.json")
+
+# ── Formspree webhook (no credentials needed by end users) ───────────────────
+# SETUP: Replace 'YOUR_FORM_ID' with your actual Formspree form ID.
+# Get yours free at https://formspree.io → Create Form → set email to adelacky.de@gmail.com
+FORMSPREE_FORM_ID = "YOUR_FORM_ID"  # e.g. "xpwzknab"
+FORMSPREE_URL = f"https://formspree.io/f/{FORMSPREE_FORM_ID}"
 
 SYNTHESIS_SYSTEM_PROMPT = """
 You are a QGIS Python expert.
@@ -130,68 +143,61 @@ def save_tool_to_community(tool_data: dict) -> bool:
         return False
 
 
-def send_community_update_email(tool_data: dict,
-                                smtp_host: str = "smtp.gmail.com",
-                                smtp_port: int = 587,
-                                smtp_user: str = "",
-                                smtp_pass: str = "") -> bool:
+def send_community_update_notification(tool_data: dict) -> bool:
     """
-    Sends an email notification to the admin when a new community tool is added.
-    
-    SETUP: Set smtp_user and smtp_pass via environment variables:
-      ATQUERY_SMTP_USER=your@gmail.com
-      ATQUERY_SMTP_PASS=your_app_password
+    Sends a notification to Adela when a new community tool is added.
 
-    Gmail requires an App Password (not your regular password).
-    Guide: https://support.google.com/accounts/answer/185833
+    Uses Formspree as a webhook relay — no SMTP credentials needed.
+    The plugin simply POSTs to a Formspree endpoint; Formspree emails Adela.
+
+    Why Formspree instead of SMTP:
+    - SMTP requires credentials on the user's machine (.env file).
+    - Plugin store users would never have that file → email silently fails.
+    - Formspree: the endpoint URL is hardcoded in the plugin (safe to ship).
+      Only the plugin AUTHOR's email is needed (set once in the Formspree dashboard).
+
+    If FORMSPREE_FORM_ID is not configured yet, logs a message and returns False.
     """
-    smtp_user = smtp_user or os.environ.get("ATQUERY_SMTP_USER", "")
-    smtp_pass = smtp_pass or os.environ.get("ATQUERY_SMTP_PASS", "")
-
-    if not smtp_user or not smtp_pass:
-        print("[AtQuery] Email skipped — ATQUERY_SMTP_USER / ATQUERY_SMTP_PASS not set.")
+    if FORMSPREE_FORM_ID == "YOUR_FORM_ID":
+        print(
+            "[AtQuery] 📧 Email skipped — Formspree not configured yet.\n"
+            "          Go to https://formspree.io, create a form, and set\n"
+            "          FORMSPREE_FORM_ID in core/web_search.py"
+        )
         return False
 
     try:
-        msg = MIMEMultipart("alternative")
-        msg["Subject"] = f"[AtQuery] New Community Tool Added: {tool_data.get('name')}"
-        msg["From"] = smtp_user
-        msg["To"] = NOTIFY_EMAIL
-
-        body_html = f"""
-        <html><body>
-        <h2>🛠️ AtQuery — New Community Tool</h2>
-        <table border="1" cellpadding="8" cellspacing="0">
-          <tr><td><b>Tool Name</b></td><td>{tool_data.get('name')}</td></tr>
-          <tr><td><b>Description</b></td><td>{tool_data.get('description')}</td></tr>
-          <tr><td><b>Keywords</b></td><td>{', '.join(tool_data.get('keywords', []))}</td></tr>
-          <tr><td><b>Original Query</b></td><td><i>{tool_data.get('original_query')}</i></td></tr>
-          <tr><td><b>Added At</b></td><td>{tool_data.get('added_at')}</td></tr>
-          <tr><td><b>Source</b></td><td>{tool_data.get('source')}</td></tr>
-        </table>
-        <h3>Implementation Preview:</h3>
-        <pre style="background:#f4f4f4;padding:10px">{tool_data.get('implementation', '')[:500]}</pre>
-        <p>Review and curate at: <code>core/community_toolbox.json</code></p>
-        </body></html>
-        """
-        msg.attach(MIMEText(body_html, "html"))
-
-        with smtplib.SMTP(smtp_host, smtp_port) as server:
-            server.starttls()
-            server.login(smtp_user, smtp_pass)
-            server.sendmail(smtp_user, NOTIFY_EMAIL, msg.as_string())
-
-        print(f"[AtQuery] 📧 Email notification sent to {NOTIFY_EMAIL}")
-        return True
+        payload = {
+            "_subject": f"[AtQuery] New Community Tool: {tool_data.get('name')}",
+            "tool_name":       tool_data.get("name"),
+            "description":     tool_data.get("description"),
+            "keywords":        ", ".join(tool_data.get("keywords", [])),
+            "original_query":  tool_data.get("original_query"),
+            "added_at":        tool_data.get("added_at"),
+            "source":          tool_data.get("source"),
+            "implementation_preview": tool_data.get("implementation", "")[:500],
+        }
+        resp = requests.post(
+            FORMSPREE_URL,
+            json=payload,
+            headers={"Accept": "application/json"},
+            timeout=10
+        )
+        if resp.status_code == 200:
+            print(f"[AtQuery] 📧 Notification sent to {NOTIFY_EMAIL} via Formspree.")
+            return True
+        else:
+            print(f"[AtQuery] Formspree returned {resp.status_code}: {resp.text[:100]}")
+            return False
 
     except Exception as e:
-        print(f"[AtQuery] Email notification failed: {e}")
+        print(f"[AtQuery] Notification failed (non-critical): {e}")
         return False
 
 
 def synthesize_and_register(query: str) -> dict | None:
     """
-    High-level entry point: synthesize a tool, save it, and send email.
+    High-level entry point: synthesize a tool, save it, and send notification.
     Returns the tool_data dict if successful, else None.
     """
     tool_data = synthesize_tool_from_query(query)
@@ -200,6 +206,6 @@ def synthesize_and_register(query: str) -> dict | None:
 
     saved = save_tool_to_community(tool_data)
     if saved:
-        send_community_update_email(tool_data)
+        send_community_update_notification(tool_data)  # Formspree webhook — no user creds needed
 
     return tool_data

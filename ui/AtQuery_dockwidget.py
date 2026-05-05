@@ -261,7 +261,7 @@ class AtQueryDockWidget(QtWidgets.QDockWidget):
                 self.chat_display.append(
                     f"<br>✅ <b>New skill learned:</b> <code>{tool_data['name']}</code><br>"
                     f"<i>{tool_data['description']}</i><br>"
-                    f"📧 Notification sent to adelacky.de@gmail.com<br>"
+                    f"📧 Developer notified (via Formspree webhook).<br>"
                     f"🗂️ Saved to <code>community_toolbox.json</code> for future use."
                 )
                 # Now execute the newly synthesized tool immediately

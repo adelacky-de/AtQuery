@@ -1,0 +1,35 @@
+# .gitignore for AtQuery QGIS Plugin
+
+# Environment variables (NEVER commit credentials)
+.env
+.env.*
+*.env
+
+# Python cache
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+
+# QGIS / Qt build artifacts
+*.pyc
+*.qmlc
+resources_rc.py
+
+# macOS
+.DS_Store
+**/.DS_Store
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Compiled resources
+resources.py
+
+# Test outputs / scratch
+test/__pycache__/
+scratch/
