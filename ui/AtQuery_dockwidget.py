@@ -92,7 +92,7 @@ class AtQueryDockWidget(QtWidgets.QDockWidget):
         self.chat_widget = QtWidgets.QWidget()
         layout = QtWidgets.QVBoxLayout(self.chat_widget)
         
-        self.chat_display = QtWidgets.QTextEdit()
+        self.chat_display = QtWidgets.QTextBrowser()
         self.chat_display.setReadOnly(True)
         
         welcome_html = f"""
