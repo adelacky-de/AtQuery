@@ -110,21 +110,12 @@ class AtQueryDockWidget(QtWidgets.QDockWidget):
         self.user_input.setPlaceholderText("Ask a question...")
         self.user_input.returnPressed.connect(self._send_query)
         
-        self.btn_force = QtWidgets.QPushButton("⚡ Best Match")
-        self.btn_force.setToolTip("Force execute the best available skill for the last query")
-        self.btn_learn = QtWidgets.QPushButton("🔍 Learn")
-        self.btn_learn.setToolTip("Search and learn a new skill from AI")
-        
-        self.btn_force.clicked.connect(lambda: getattr(self, 'last_user_query', None) and self._handle_no_skill_fallback(self.last_user_query, [], force_yes=True))
-        self.btn_learn.clicked.connect(lambda: getattr(self, 'last_user_query', None) and self._handle_no_skill_fallback(self.last_user_query, [], force_no=True))
-        
-        input_layout = QtWidgets.QHBoxLayout()
-        input_layout.addWidget(self.user_input)
-        input_layout.addWidget(self.btn_force)
-        input_layout.addWidget(self.btn_learn)
-        
         layout.addWidget(self.chat_display)
-        layout.addLayout(input_layout)
+        layout.addWidget(self.user_input)
+        
+        # Connect anchor clicks (for inline fallback buttons in chat)
+        self.chat_display.setOpenLinks(False)
+        self.chat_display.anchorClicked.connect(self._on_chat_anchor_clicked)
         self.layout_stack.addWidget(self.chat_widget)
 
     def check_ollama_status(self):
@@ -209,7 +200,7 @@ class AtQueryDockWidget(QtWidgets.QDockWidget):
             
             # ── POST-LOOP FALLBACK ──────────────────────────────────────────
             if not tool_was_executed:
-                self._handle_no_skill_fallback(user_text, current_turn_history)
+                self._show_fallback_card_in_chat(user_text, current_turn_history)
             else:
                 # FIX: Save only clean text to prevent tool JSON logs from confusing the AI
                 final_ai_msg = [m for m in current_turn_history if m["role"] == "assistant" and m.get("content")]
@@ -220,40 +211,60 @@ class AtQueryDockWidget(QtWidgets.QDockWidget):
         except Exception as e:
             self.chat_display.append(f"<br><b>Error:</b> {str(e)}")
 
+    def _on_chat_anchor_clicked(self, url):
+        """Handles clicks on inline fallback buttons inside the chat display."""
+        action = url.toString()
+        query = getattr(self, 'last_user_query', None)
+        if not query:
+            return
+        if action == 'atquery://best-match':
+            self._handle_no_skill_fallback(query, [], force_yes=True)
+        elif action == 'atquery://learn':
+            self._handle_no_skill_fallback(query, [], force_no=True)
+
+    def _show_fallback_card_in_chat(self, query: str, current_turn_history: list):
+        """
+        Injects an inline fallback card into the chat bubble stream.
+        Shown when the 5-step loop finishes without executing any tool.
+        Contains two clickable action links that trigger the force-execute
+        or synthesis paths without any popup dialogs.
+        """
+        from ..core.ai_brain import get_available_toolboxes_summary
+        card_html = f"""
+        <table width="100%" cellspacing="0" cellpadding="10" border="0" style="margin-top: 5px; margin-bottom: 5px;">
+            <tr>
+                <td style="background-color: #FFF8E1; color: #000; border-radius: 8px; border-left: 4px solid #FFC107;">
+                    <b>⚠️ AtQuery couldn't find a built-in skill for:</b><br>
+                    <i>"{query}"</i><br><br>
+                    What would you like to do?<br><br>
+                    &nbsp;&nbsp;
+                    <a href="atquery://best-match" style="background:#4CAF50; color:white; padding:4px 10px; border-radius:4px; text-decoration:none;">⚡ Execute Best Match</a>
+                    &nbsp;&nbsp;
+                    <a href="atquery://learn" style="background:#2196F3; color:white; padding:4px 10px; border-radius:4px; text-decoration:none;">🔍 Search &amp; Learn New Skill</a>
+                </td>
+            </tr>
+        </table>
+        """
+        # Remove 'Thinking...' first
+        cursor = self.chat_display.textCursor()
+        cursor.movePosition(QtGui.QTextCursor.End)
+        cursor.select(QtGui.QTextCursor.BlockUnderCursor)
+        if "AtQuery is thinking..." in cursor.selectedText():
+            cursor.removeSelectedText()
+        self.chat_display.append(card_html)
+
+
     def _handle_no_skill_fallback(self, query: str, current_turn_history: list, force_yes=False, force_no=False):
         """
-        Called when the 5-step loop finishes without executing any tool, OR manually via buttons.
-        Tier 1: Check community toolbox (already done in _send_query pre-load).
-        Tier 2: Show specific confirm dialog — list available toolboxes.
-        Tier 3: Y → direct force execute; N → LLM synthesis + community register.
+        Called from anchor clicks (⚡ or 🔍) in the inline fallback card.
+        force_yes → Direct Force Execute using all toolboxes.
+        force_no  → LLM synthesis + save to community_toolbox.json.
         """
         from ..core.ai_brain import get_base_tools, _load_catalog_from_md, get_toolbox_skills
         from ..core.web_search import synthesize_and_register
 
-        if not force_yes and not force_no:
-            toolboxes_summary = get_available_toolboxes_summary()
-            msg_box = QtWidgets.QMessageBox(self)
-            msg_box.setWindowTitle("AtQuery — No Matching Skill Found")
-            msg_box.setIcon(QtWidgets.QMessageBox.Question)
-            msg_box.setText(
-                f"<b>No skill matched your request:</b><br><i>\"{query}\"</i><br><br>"
-                f"AtQuery currently supports these toolboxes:<br>"
-                f"<pre style='font-size:11px'>{toolboxes_summary}</pre>"
-                f"<br>Is your request related to one of the above?"
-            )
-            yes_btn = msg_box.addButton("Yes — Execute Best Match", QtWidgets.QMessageBox.YesRole)
-            no_btn  = msg_box.addButton("No — Search & Learn New Skill", QtWidgets.QMessageBox.NoRole)
-            msg_box.exec_()
-            
-            clicked_yes = (msg_box.clickedButton() == yes_btn)
-            clicked_no = (msg_box.clickedButton() == no_btn)
-        else:
-            clicked_yes = force_yes
-            clicked_no = force_no
-
-        if clicked_yes:
-            # ── Y: DIRECT FORCE EXECUTE ─────────────────────────────────────
-            # Load ALL built-in toolboxes + community into a single tool set
+        if force_yes:
+            # ── ⚡ DIRECT FORCE EXECUTE ──────────────────────────────────────
             self.chat_display.append("<i>⚡ Force-loading all toolboxes and executing best match...</i>")
             QtWidgets.QApplication.processEvents()
 
@@ -263,45 +274,37 @@ class AtQueryDockWidget(QtWidgets.QDockWidget):
                 forced_tools.extend(get_toolbox_skills(tb_name))
             forced_tools.extend(load_community_toolbox())
 
-            # Single forced-execution AI call with specialized prompt
             try:
                 payload_messages = [
                     {"role": "system", "content": get_forced_execution_prompt()},
                     {"role": "user",   "content": query}
                 ]
                 ai_msg = self._get_ai_response(payload_messages, forced_tools)
-
                 if ai_msg.get("tool_calls"):
                     tool_outputs = []
                     for tc in ai_msg["tool_calls"]:
                         output = self.handle_tool_call(json.dumps(tc))
                         tool_outputs.append({"role": "tool", "content": output, "tool_call_id": tc.get("id")})
-                    # Get final summary from AI
                     final_messages = payload_messages + [ai_msg] + tool_outputs
                     final_msg = self._get_ai_response(final_messages, forced_tools)
                     content = final_msg.get("content", "Best-match execution completed.")
                 else:
                     content = ai_msg.get("content", "I executed the closest available skill.")
-                
                 self.handle_ai_response(content)
-                current_turn_history.extend([ai_msg])
             except Exception as e:
                 self.chat_display.append(f"<br><b>Force-execute error:</b> {str(e)}")
 
-        else:
-            # ── N: SYNTHESIZE + REGISTER NEW TOOL ──────────────────────────
-            self.chat_display.append(
-                "<i>🔍 No existing match. Synthesizing a new skill from AI knowledge...</i>"
-            )
+        elif force_no:
+            # ── 🔍 SYNTHESIZE + REGISTER NEW TOOL ───────────────────────────
+            self.chat_display.append("<i>🔍 Synthesizing a new skill from AI knowledge...</i>")
             QtWidgets.QApplication.processEvents()
 
             tool_data = synthesize_and_register(query)
-
             if tool_data:
                 skill_bubble = f"""
-                <table width="100%" cellspacing="0" cellpadding="8" border="0" style="margin-top: 5px; margin-bottom: 5px;">
+                <table width="100%" cellspacing="0" cellpadding="8" border="0" style="margin-top:5px;margin-bottom:5px;">
                     <tr>
-                        <td style="background-color: #FFF3E0; color: #000; border-radius: 8px;">
+                        <td style="background-color:#FFF3E0;color:#000;border-radius:8px;">
                             ✅ <b>New skill learned:</b> <code>{tool_data['name']}</code><br>
                             <i>{tool_data['description']}</i><br>
                             📧 Developer notified (via Formspree webhook).<br>
@@ -311,33 +314,30 @@ class AtQueryDockWidget(QtWidgets.QDockWidget):
                 </table>
                 """
                 self.chat_display.append(skill_bubble)
-                # Now execute the newly synthesized tool immediately
                 try:
                     from ..core.ai_brain import SKILL_IMPLEMENTATIONS
                     impl_code = SKILL_IMPLEMENTATIONS.get(tool_data['name'])
                     if impl_code:
-                        local_context = {
-                            'self': self, 'args': {}, 'QgsProject': __import__('qgis.core', fromlist=['QgsProject']).QgsProject,
-                            'processing': __import__('processing'), 'json': json, 'result': None,
-                            'iface': self.iface, 'canvas': self.iface.mapCanvas()
+                        exec_context = {
+                            **globals(),
+                            'self': self, 'args': {}, 'result': None,
+                            'QgsProject': QgsProject, 'processing': processing,
+                            'json': json, 'iface': self.iface,
+                            'canvas': self.iface.mapCanvas()
                         }
-                        exec(impl_code, globals(), local_context)
-                        r = local_context.get('result')
+                        exec(impl_code, exec_context)
+                        r = exec_context.get('result')
                         if r:
                             self.chat_display.append(f"<br>▶️ <b>Result:</b> {json.dumps(r)}")
                 except Exception as ex:
                     self.chat_display.append(f"<br>⚠️ Skill saved but execution needs review: {str(ex)}")
             else:
                 self.chat_display.append(
-                    "<br>⚠️ Could not synthesize a skill for this request. "
-                    "Please check your Ollama connection and try again."
+                    "<br>⚠️ Could not synthesize a skill. Please check your Ollama connection."
                 )
 
-        # FIX: Save only clean text to prevent tool JSON logs from confusing the AI
-        final_ai_msg = [m for m in current_turn_history if m["role"] == "assistant" and m.get("content")]
-        if final_ai_msg:
-            self.conversation_history.append({"role": "user", "content": query})
-            self.conversation_history.append({"role": "assistant", "content": final_ai_msg[-1]["content"]})
+
+
     def _get_ai_response(self, messages, tools):
         sanitized = []
         for m in messages:
@@ -390,15 +390,26 @@ class AtQueryDockWidget(QtWidgets.QDockWidget):
             from ..core.ai_brain import get_implementation
             code = get_implementation(name)
             if code:
-                local_context = {
-                    'self': self, 'args': args, 'QgsProject': QgsProject, 
-                    'QgsRectangle': QgsRectangle, 'QgsGeometry': QgsGeometry, 
-                    'QgsFeature': QgsFeature, 'QgsFields': QgsFields,
-                    'processing': processing, 'json': json, 'result': None,
-                    'iface': self.iface, 'canvas': self.iface.mapCanvas()
+                # FIX: Merge globals + locals into a single dict so that tool code
+                # can access iface, QgsProject etc. without scope shadowing issues.
+                exec_context = {
+                    **globals(),
+                    'self': self,
+                    'args': args,
+                    'QgsProject': QgsProject,
+                    'QgsRectangle': QgsRectangle,
+                    'QgsGeometry': QgsGeometry,
+                    'QgsFeature': QgsFeature,
+                    'QgsFields': QgsFields,
+                    'processing': processing,
+                    'json': json,
+                    'result': None,
+                    'iface': self.iface,
+                    'canvas': self.iface.mapCanvas()
                 }
-                exec(code, globals(), local_context)
-                return json.dumps(local_context['result']) if local_context['result'] is not None else json.dumps({"status": "success"})
+                exec(code, exec_context)
+                result = exec_context.get('result')
+                return json.dumps(result) if result is not None else json.dumps({"status": "success"})
             
             return json.dumps({"error": f"Tool '{name}' implementation not found."})
         except Exception as e:
