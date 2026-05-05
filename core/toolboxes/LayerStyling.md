@@ -6,7 +6,7 @@ This toolbox provides skills to modify the visual appearance of layers in QGIS.
 ```json
 {
   "name": "set_layer_color",
-  "description": "Sets the fill or line color of a vector layer using a HEX color code.",
+  "description": "Sets the fill or line color of a vector layer using a HEX color code. DO NOT use this tool if the user is asking to change transparency or opacity; use set_layer_transparency instead.",
   "parameters": {
     "type": "object",
     "properties": {

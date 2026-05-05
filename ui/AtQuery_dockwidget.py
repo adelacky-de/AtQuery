@@ -162,9 +162,15 @@ class AtQueryDockWidget(QtWidgets.QDockWidget):
         tool_was_executed = False
         gis_tools_called = set()  # Tracks real QGIS tools (excludes meta tools)
         META_TOOLS = {"load_toolbox_skills"}  # Tools that manage the loop, not QGIS actions
+        consecutive_errors = 0
 
         try:
             for step in range(5):
+                if consecutive_errors >= 2:
+                    self.chat_display.append("<br>⚠️ <b>AtQuery aborted the task: a required tool failed repeatedly (likely missing data or incorrect parameters).</b>")
+                    tool_was_executed = False
+                    break
+                    
                 # FIX: Limit long-term memory to last 2 turns to prevent hallucination
                 combined_history = self.conversation_history[-2:] + current_turn_history
                 ai_msg = self._get_ai_response(combined_history, active_tools)
@@ -196,10 +202,18 @@ class AtQueryDockWidget(QtWidgets.QDockWidget):
                         self.chat_display.append(
                             f"<span style='color:#888; font-size:11px;'>🔧 Used tool: <code>{tool_name}</code></span>"
                         )
+                    
+                    if "error" in output.lower():
+                        consecutive_errors += 1
+                    else:
+                        consecutive_errors = 0
+                        
                     tool_outputs.append({"role": "tool", "content": output, "tool_call_id": tc.get("id")})
+                
                 current_turn_history.extend(tool_outputs)
 
-            tool_was_executed = bool(gis_tools_called)
+            if consecutive_errors < 2:
+                tool_was_executed = bool(gis_tools_called)
             
             # ── POST-LOOP FALLBACK ──────────────────────────────────────────
             if not tool_was_executed:
@@ -296,6 +310,10 @@ class AtQueryDockWidget(QtWidgets.QDockWidget):
                     final_messages = payload_messages + [ai_msg] + tool_outputs
                     final_msg = self._get_ai_response(final_messages, forced_tools)
                     content = final_msg.get("content", "Best-match execution completed.")
+                    
+                    # If the forced tool also failed, warn the user
+                    if any("error" in out.get("content", "").lower() for out in tool_outputs):
+                        content += "<br><br>⚠️ <b>Warning:</b> The forced tool encountered an error. You may be missing required data (e.g. an elevation raster)."
                 else:
                     content = ai_msg.get("content", "I executed the closest available skill.")
                 self.handle_ai_response(content)
