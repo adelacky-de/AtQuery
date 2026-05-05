@@ -386,7 +386,10 @@ class AtQueryDockWidget(QtWidgets.QDockWidget):
         if "AtQuery is thinking..." in cursor.selectedText():
             cursor.removeSelectedText()
         
-        self.chat_display.append(f"<br><b>AtQuery:</b> {text}")
+        import re
+        # Add space after periods if missing (e.g. "Sentence.Next sentence" -> "Sentence. Next sentence")
+        text = re.sub(r'\.(?=[A-Za-z])', '. ', text)
+        self.chat_display.append(f"<br>💡 <b>AtQuery:</b> {text}")
         if suggested:
             for q in suggested:
                 self.chat_display.append(f" - <a href='#'>{q}</a>")

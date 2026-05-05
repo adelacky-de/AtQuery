@@ -25,6 +25,7 @@ import json
 import re
 import time
 import requests
+from typing import Optional
 
 OLLAMA_URL = "http://localhost:11434/api/chat"
 MODEL_NAME = "qwen2.5:3b"
@@ -69,7 +70,7 @@ RULES:
 """
 
 
-def synthesize_tool_from_query(query: str) -> dict | None:
+def synthesize_tool_from_query(query: str) -> Optional[dict]:
     """
     Uses the local LLM to synthesize a new QGIS tool schema + implementation
     for a user query that had no toolbox match.
@@ -195,7 +196,7 @@ def send_community_update_notification(tool_data: dict) -> bool:
         return False
 
 
-def synthesize_and_register(query: str) -> dict | None:
+def synthesize_and_register(query: str) -> Optional[dict]:
     """
     High-level entry point: synthesize a tool, save it, and send notification.
     Returns the tool_data dict if successful, else None.

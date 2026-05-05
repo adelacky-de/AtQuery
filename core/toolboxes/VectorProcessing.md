@@ -39,7 +39,7 @@ if layer:
         'JOIN_STYLE': 0,
         'MITER_LIMIT': 2,
         'DISSOLVE': False,
-        'OUTPUT': f'memory:{out_name}'
+        'OUTPUT': 'memory:'
     })
     out_layer = res['OUTPUT']
     out_layer.setName(out_name)
@@ -75,7 +75,7 @@ if layer:
         out_name = args.get('output_name') or f"{layer.name()}_selection"
         res = processing.run("native:saveselectedfeatures", {
             'INPUT': layer,
-            'OUTPUT': f'memory:{out_name}'
+            'OUTPUT': 'memory:'
         })
         out_layer = res['OUTPUT']
         out_layer.setName(out_name)
