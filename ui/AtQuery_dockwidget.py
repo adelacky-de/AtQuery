@@ -191,8 +191,11 @@ class AtQueryDockWidget(QtWidgets.QDockWidget):
                         skills = json.loads(output)
                         if isinstance(skills, list): active_tools.extend(skills)
                     else:
-                        # A real QGIS tool was called
+                        # A real QGIS tool was called — show it in chat
                         gis_tools_called.add(tool_name)
+                        self.chat_display.append(
+                            f"<span style='color:#888; font-size:11px;'>🔧 Used tool: <code>{tool_name}</code></span>"
+                        )
                     tool_outputs.append({"role": "tool", "content": output, "tool_call_id": tc.get("id")})
                 current_turn_history.extend(tool_outputs)
 
@@ -284,6 +287,11 @@ class AtQueryDockWidget(QtWidgets.QDockWidget):
                     tool_outputs = []
                     for tc in ai_msg["tool_calls"]:
                         output = self.handle_tool_call(json.dumps(tc))
+                        tool_name = tc.get("function", {}).get("name", "")
+                        # Show which tool was chosen
+                        self.chat_display.append(
+                            f"<span style='color:#888; font-size:11px;'>🔧 Used tool: <code>{tool_name}</code></span>"
+                        )
                         tool_outputs.append({"role": "tool", "content": output, "tool_call_id": tc.get("id")})
                     final_messages = payload_messages + [ai_msg] + tool_outputs
                     final_msg = self._get_ai_response(final_messages, forced_tools)
