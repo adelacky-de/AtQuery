@@ -58,9 +58,11 @@ else:
         val = float(args['opacity'])
         layer.setOpacity(val / 100.0)
         layer.triggerRepaint()
+        iface.layerTreeView().refreshLayerSymbology(layer.id())
         result = {"status": "success", "message": f"Opacity of '{layer.name()}' set to {val}%"}
-    except:
-        result = {"error": "Invalid opacity value. Must be a number."}
+    except Exception as e:
+        result = {"error": f"Invalid opacity value: {str(e)}"}
+```
 
 ### Tool: zoom_to_layer
 ```json
@@ -82,8 +84,7 @@ layer = self._resolve_layer(args['layer_name'])
 if layer:
     self.iface.mapCanvas().setExtent(layer.extent())
     self.iface.mapCanvas().refresh()
-    result = {"status": "success"}
+    result = {"status": "success", "message": f"Map zoomed to '{layer.name()}'"}
 else:
     result = {"error": "Layer not found"}
-```
 ```

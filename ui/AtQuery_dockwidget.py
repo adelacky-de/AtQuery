@@ -145,6 +145,8 @@ class AtQueryDockWidget(QtWidgets.QDockWidget):
             active_tools.extend(community_matches)
         
         tool_was_executed = False
+        gis_tools_called = set()  # Tracks real QGIS tools (excludes meta tools)
+        META_TOOLS = {"load_toolbox_skills"}  # Tools that manage the loop, not QGIS actions
 
         try:
             for step in range(5):
@@ -154,14 +156,9 @@ class AtQueryDockWidget(QtWidgets.QDockWidget):
 
                 if not ai_msg.get("tool_calls"):
                     content = ai_msg.get("content", "").strip()
-                    if not content and step > 0:
+                    # Only mark executed if a real GIS tool already ran this turn
+                    if gis_tools_called and not content:
                         content = "Action completed successfully."
-                        tool_was_executed = True
-                    elif not content:
-                        content = None  # Will trigger fallback below
-                    else:
-                        tool_was_executed = True
-                    
                     if content:
                         self.handle_ai_response(content, ai_msg.get("suggested_queries"))
                     break
@@ -173,9 +170,13 @@ class AtQueryDockWidget(QtWidgets.QDockWidget):
                     if tool_name == "load_toolbox_skills":
                         skills = json.loads(output)
                         if isinstance(skills, list): active_tools.extend(skills)
+                    else:
+                        # A real QGIS tool was called
+                        gis_tools_called.add(tool_name)
                     tool_outputs.append({"role": "tool", "content": output, "tool_call_id": tc.get("id")})
-                    tool_was_executed = True
                 current_turn_history.extend(tool_outputs)
+
+            tool_was_executed = bool(gis_tools_called)
             
             # ── POST-LOOP FALLBACK ──────────────────────────────────────────
             if not tool_was_executed:

@@ -26,23 +26,25 @@ from qgis.core import QgsUnitTypes
 layer = self._resolve_layer(args['layer_name'])
 if layer:
     dist = args['distance']
-    # Check if the layer uses degrees
+    # Check if the layer uses degrees — convert meters to degrees
     if layer.crs().mapUnits() == QgsUnitTypes.DistanceDegrees:
-        # Very rough approximation for meters to degrees
         dist = dist / 111319.9
-        
+    
+    out_name = f"{layer.name()}_{int(args['distance'])}m_buffer"
     res = processing.run("native:buffer", {
-        'INPUT': layer, 
-        'DISTANCE': dist, 
+        'INPUT': layer,
+        'DISTANCE': dist,
         'SEGMENTS': 5,
         'END_CAP_STYLE': 0,
         'JOIN_STYLE': 0,
         'MITER_LIMIT': 2,
         'DISSOLVE': False,
-        'OUTPUT': 'memory:'
+        'OUTPUT': f'memory:{out_name}'
     })
-    QgsProject.instance().addMapLayer(res['OUTPUT'])
-    result = {"status": "success", "layer_name": res['OUTPUT'].name(), "distance_used": dist}
+    out_layer = res['OUTPUT']
+    out_layer.setName(out_name)
+    QgsProject.instance().addMapLayer(out_layer)
+    result = {"status": "success", "layer_name": out_name, "distance_used": dist}
 else:
     result = {"error": "Layer not found"}
 ```
@@ -70,9 +72,15 @@ if layer:
     if layer.selectedFeatureCount() == 0:
         result = {"error": "No features selected in layer."}
     else:
-        res = processing.run("native:saveselectedfeatures", {'INPUT': layer, 'OUTPUT': 'memory:'})
-        QgsProject.instance().addMapLayer(res['OUTPUT'])
-        result = {"status": "success", "new_layer": res['OUTPUT'].name()}
+        out_name = args.get('output_name') or f"{layer.name()}_selection"
+        res = processing.run("native:saveselectedfeatures", {
+            'INPUT': layer,
+            'OUTPUT': f'memory:{out_name}'
+        })
+        out_layer = res['OUTPUT']
+        out_layer.setName(out_name)
+        QgsProject.instance().addMapLayer(out_layer)
+        result = {"status": "success", "new_layer": out_name}
 else:
     result = {"error": "Layer not found"}
 ```
