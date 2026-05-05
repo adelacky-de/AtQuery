@@ -99,7 +99,8 @@ class AtQueryDockWidget(QtWidgets.QDockWidget):
         <div style='text-align: left; margin-bottom: 10px;'>
             <img src='file://{self.logo_path}' width='50' height='50'><br>
             <b style='font-size: 16px; color: #4CAF50;'>AtQuery by Adela C</b><br>
-            <i>Your Agentic GIS Assistant</i>
+            <i>Your Agentic GIS Assistant</i><br>
+            <a href="https://github.com/adelacky-de/atquery" style="font-size: 11px; color: #2196F3; text-decoration: none;">★ Star on GitHub</a>
         </div>
         <hr>
         Welcome! Ask a question about your QGIS project.<br>
