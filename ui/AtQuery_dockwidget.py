@@ -125,7 +125,12 @@ class AtQueryDockWidget(QtWidgets.QDockWidget):
         user_text = self.user_input.text().strip()
         if not user_text: return
         
-        self.chat_display.append(f"<br><b>You:</b> {user_text}")
+        user_bubble = f"""
+        <div style="background-color: #E3F2FD; color: #000; padding: 10px; border-radius: 8px; margin: 5px 0;">
+            <b>You:</b> {user_text}
+        </div>
+        """
+        self.chat_display.append(user_bubble)
         self.user_input.clear()
         self.chat_display.append("<i>AtQuery is thinking...</i>")
         QtWidgets.QApplication.processEvents()
@@ -268,12 +273,15 @@ class AtQueryDockWidget(QtWidgets.QDockWidget):
             tool_data = synthesize_and_register(query)
 
             if tool_data:
-                self.chat_display.append(
-                    f"<br>✅ <b>New skill learned:</b> <code>{tool_data['name']}</code><br>"
-                    f"<i>{tool_data['description']}</i><br>"
-                    f"📧 Developer notified (via Formspree webhook).<br>"
-                    f"🗂️ Saved to <code>community_toolbox.json</code> for future use."
-                )
+                skill_bubble = f"""
+                <div style="background-color: #FFF3E0; color: #000; padding: 10px; border-radius: 8px; margin: 5px 0;">
+                    ✅ <b>New skill learned:</b> <code>{tool_data['name']}</code><br>
+                    <i>{tool_data['description']}</i><br>
+                    📧 Developer notified (via Formspree webhook).<br>
+                    🗂️ Saved to <code>community_toolbox.json</code> for future use.
+                </div>
+                """
+                self.chat_display.append(skill_bubble)
                 # Now execute the newly synthesized tool immediately
                 try:
                     from ..core.ai_brain import SKILL_IMPLEMENTATIONS
@@ -401,7 +409,13 @@ class AtQueryDockWidget(QtWidgets.QDockWidget):
         import re
         # Add space after periods if missing (e.g. "Sentence.Next sentence" -> "Sentence. Next sentence")
         text = re.sub(r'\.(?=[A-Za-z])', '. ', text)
-        self.chat_display.append(f"<br>💡 <b>AtQuery:</b> {text}")
+        
+        ai_bubble = f"""
+        <div style="background-color: #F5F5F5; color: #000; padding: 10px; border-radius: 8px; margin: 5px 0;">
+            💡 <b>AtQuery:</b> {text}
+        </div>
+        """
+        self.chat_display.append(ai_bubble)
         if suggested:
             for q in suggested:
                 self.chat_display.append(f" - <a href='#'>{q}</a>")
