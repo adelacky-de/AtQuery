@@ -463,6 +463,12 @@ class AtQueryDockWidget(QtWidgets.QDockWidget):
             <tr>
                 <td style="background-color: #F5F5F5; color: #000; border-radius: 8px;">
                     💡 <b>AtQuery:</b> {text}
+                    <hr style="border: none; border-top: 1px solid #ddd; margin: 8px 0;">
+                    <div style="font-size: 11px; color: #666;">
+                        Not working? Try: &nbsp;
+                        <a href="atquery://best-match" style="color: #4CAF50; text-decoration: none; font-weight: bold;">⚡ Force Match</a> &nbsp;&nbsp;
+                        <a href="atquery://learn" style="color: #2196F3; text-decoration: none; font-weight: bold;">🔍 Search &amp; Learn</a>
+                    </div>
                 </td>
             </tr>
         </table>

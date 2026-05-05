@@ -56,9 +56,26 @@ if not layer:
 else:
     try:
         val = float(args['opacity'])
-        layer.setOpacity(val / 100.0)
+        opacity_val = val / 100.0
+        
+        # 1. Set global layer opacity
+        layer.setOpacity(opacity_val)
+        
+        # 2. Force the renderer to acknowledge it if it's a vector layer
+        if hasattr(layer, 'renderer'):
+            renderer = layer.renderer()
+            if renderer:
+                renderer.setOpacity(opacity_val)
+                
+        # 3. Force UI and Map canvas to update immediately
         layer.triggerRepaint()
-        iface.layerTreeView().refreshLayerSymbology(layer.id())
+        layer.styleChanged.emit()
+        
+        if hasattr(iface, 'layerTreeView'):
+            iface.layerTreeView().refreshLayerSymbology(layer.id())
+            
+        iface.mapCanvas().refresh()
+        
         result = {"status": "success", "message": f"Opacity of '{layer.name()}' set to {val}%"}
     except Exception as e:
         result = {"error": f"Invalid opacity value: {str(e)}"}
