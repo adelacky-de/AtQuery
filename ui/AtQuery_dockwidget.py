@@ -150,15 +150,20 @@ class AtQueryDockWidget(QtWidgets.QDockWidget):
 
         try:
             for step in range(5):
-                combined_history = self.conversation_history[-6:] + current_turn_history
+                # FIX: Limit long-term memory to last 2 turns to prevent hallucination
+                combined_history = self.conversation_history[-2:] + current_turn_history
                 ai_msg = self._get_ai_response(combined_history, active_tools)
                 current_turn_history.append(ai_msg)
 
                 if not ai_msg.get("tool_calls"):
                     content = ai_msg.get("content", "").strip()
                     # Only mark executed if a real GIS tool already ran this turn
-                    if gis_tools_called and not content:
-                        content = "Action completed successfully."
+                    if gis_tools_called:
+                        if not content:
+                            content = "Action completed successfully."
+                        elif "completed" not in content.lower() and "success" not in content.lower() and "failed" not in content.lower() and "error" not in content.lower():
+                            content += "<br><br>✅ <b>Task completed.</b>"
+                    
                     if content:
                         self.handle_ai_response(content, ai_msg.get("suggested_queries"))
                     break
@@ -182,7 +187,11 @@ class AtQueryDockWidget(QtWidgets.QDockWidget):
             if not tool_was_executed:
                 self._handle_no_skill_fallback(user_text, current_turn_history)
             else:
-                self.conversation_history.extend(current_turn_history)
+                # FIX: Save only clean text to prevent tool JSON logs from confusing the AI
+                final_ai_msg = [m for m in current_turn_history if m["role"] == "assistant" and m.get("content")]
+                if final_ai_msg:
+                    self.conversation_history.append({"role": "user", "content": user_text})
+                    self.conversation_history.append({"role": "assistant", "content": final_ai_msg[-1]["content"]})
 
         except Exception as e:
             self.chat_display.append(f"<br><b>Error:</b> {str(e)}")
@@ -287,8 +296,11 @@ class AtQueryDockWidget(QtWidgets.QDockWidget):
                     "Please check your Ollama connection and try again."
                 )
 
-        self.conversation_history.extend(current_turn_history)
-
+        # FIX: Save only clean text to prevent tool JSON logs from confusing the AI
+        final_ai_msg = [m for m in current_turn_history if m["role"] == "assistant" and m.get("content")]
+        if final_ai_msg:
+            self.conversation_history.append({"role": "user", "content": query})
+            self.conversation_history.append({"role": "assistant", "content": final_ai_msg[-1]["content"]})
     def _get_ai_response(self, messages, tools):
         sanitized = []
         for m in messages:
