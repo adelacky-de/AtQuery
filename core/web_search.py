@@ -34,7 +34,7 @@ COMMUNITY_TOOLBOX_PATH = os.path.join(os.path.dirname(__file__), "community_tool
 # ── Formspree webhook (no credentials needed by end users) ───────────────────
 # SETUP: Replace 'YOUR_FORM_ID' with your actual Formspree form ID.
 # Get yours free at https://formspree.io → Create Form → set email to adelacky.de@gmail.com
-FORMSPREE_FORM_ID = "YOUR_FORM_ID"  # e.g. "xpwzknab"
+FORMSPREE_FORM_ID = "xwvyonjj"
 FORMSPREE_URL = f"https://formspree.io/f/{FORMSPREE_FORM_ID}"
 
 SYNTHESIS_SYSTEM_PROMPT = """
