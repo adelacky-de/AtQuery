@@ -160,6 +160,7 @@ class AtQueryDockWidget(QtWidgets.QDockWidget):
             active_tools.extend(community_matches)
         
         tool_was_executed = False
+        aborted_due_to_error = False
         gis_tools_called = set()  # Tracks real QGIS tools (excludes meta tools)
         META_TOOLS = {"load_toolbox_skills"}  # Tools that manage the loop, not QGIS actions
         total_errors_in_turn = 0
@@ -167,7 +168,7 @@ class AtQueryDockWidget(QtWidgets.QDockWidget):
         try:
             for step in range(5):
                 if total_errors_in_turn >= 2:
-                    self.chat_display.append("<br>⚠️ <b>AtQuery aborted the task: a required tool failed repeatedly (likely missing data or incorrect parameters).</b>")
+                    aborted_due_to_error = True
                     tool_was_executed = False
                     break
                     
@@ -178,11 +179,6 @@ class AtQueryDockWidget(QtWidgets.QDockWidget):
 
                 if not ai_msg.get("tool_calls"):
                     content = ai_msg.get("content", "").strip()
-                    
-                    # Prevent AI from hallucinating completion if it didn't do anything
-                    if not gis_tools_called and any(word in content.lower() for word in ["completed", "success", "is now", "has been"]):
-                        content = "" # Suppress the lie
-                        
                     # Only mark executed if a real GIS tool already ran this turn
                     if gis_tools_called:
                         if not content:
@@ -220,7 +216,7 @@ class AtQueryDockWidget(QtWidgets.QDockWidget):
             
             # ── POST-LOOP FALLBACK ──────────────────────────────────────────
             if not tool_was_executed:
-                self._show_fallback_card_in_chat(user_text, current_turn_history)
+                self._show_fallback_card_in_chat(user_text, current_turn_history, aborted=aborted_due_to_error)
             else:
                 # FIX: Save only clean text to prevent tool JSON logs from confusing the AI
                 final_ai_msg = [m for m in current_turn_history if m["role"] == "assistant" and m.get("content")]
@@ -242,21 +238,26 @@ class AtQueryDockWidget(QtWidgets.QDockWidget):
         elif action == 'atquery://learn':
             self._handle_no_skill_fallback(query, [], force_no=True)
 
-    def _show_fallback_card_in_chat(self, query: str, current_turn_history: list):
+    def _show_fallback_card_in_chat(self, query: str, current_turn_history: list, aborted=False):
         """
         Injects an inline fallback card into the chat bubble stream.
-        Shown when the 5-step loop finishes without executing any tool.
-        Contains two clickable action links that trigger the force-execute
-        or synthesis paths without any popup dialogs.
         """
         from ..core.ai_brain import get_available_toolboxes_summary
+        
+        if aborted:
+            title = "⚠️ AtQuery aborted the task"
+            subtitle = f"<i>\"{query}\"</i><br><br>A tool failed repeatedly. This usually happens if you are missing required data (like an elevation raster) or if the tool parameters are invalid."
+        else:
+            title = "⚠️ AtQuery couldn't find a built-in skill for:"
+            subtitle = f"<i>\"{query}\"</i>"
+
         card_html = f"""
         <table width="100%" cellspacing="0" cellpadding="10" border="0" style="margin-top: 5px; margin-bottom: 5px;">
             <tr>
                 <td style="background-color: #FFF8E1; color: #000; border-radius: 8px; border-left: 4px solid #FFC107;">
-                    <b>⚠️ AtQuery couldn't find a built-in skill for:</b><br>
-                    <i>"{query}"</i><br><br>
-                    What would you like to do?<br><br>
+                    <b>{title}</b><br>
+                    {subtitle}<br><br>
+                    What would you like to do next?<br><br>
                     &nbsp;&nbsp;
                     <a href="atquery://best-match" style="background:#4CAF50; color:white; padding:4px 10px; border-radius:4px; text-decoration:none;">⚡ Execute Best Match</a>
                     &nbsp;&nbsp;
