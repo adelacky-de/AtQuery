@@ -178,6 +178,11 @@ class AtQueryDockWidget(QtWidgets.QDockWidget):
 
                 if not ai_msg.get("tool_calls"):
                     content = ai_msg.get("content", "").strip()
+                    
+                    # Prevent AI from hallucinating completion if it didn't do anything
+                    if not gis_tools_called and any(word in content.lower() for word in ["completed", "success", "is now", "has been"]):
+                        content = "" # Suppress the lie
+                        
                     # Only mark executed if a real GIS tool already ran this turn
                     if gis_tools_called:
                         if not content:
