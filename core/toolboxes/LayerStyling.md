@@ -61,13 +61,7 @@ else:
         # 1. Set global layer opacity
         layer.setOpacity(opacity_val)
         
-        # 2. Force the renderer to acknowledge it if it's a vector layer
-        if hasattr(layer, 'renderer'):
-            renderer = layer.renderer()
-            if renderer:
-                renderer.setOpacity(opacity_val)
-                
-        # 3. Force UI and Map canvas to update immediately
+        # 2. Force UI and Map canvas to update immediately
         layer.triggerRepaint()
         layer.styleChanged.emit()
         

@@ -162,12 +162,12 @@ class AtQueryDockWidget(QtWidgets.QDockWidget):
         tool_was_executed = False
         gis_tools_called = set()  # Tracks real QGIS tools (excludes meta tools)
         META_TOOLS = {"load_toolbox_skills"}  # Tools that manage the loop, not QGIS actions
-        consecutive_errors = 0
+        total_errors = 0
 
         try:
             for step in range(5):
-                if consecutive_errors >= 2:
-                    self.chat_display.append("<br>⚠️ <b>AtQuery aborted the task: a required tool failed repeatedly (likely missing data or incorrect parameters).</b>")
+                if total_errors >= 2:
+                    self.chat_display.append("<br>⚠️ <b>AtQuery aborted the task: required tools failed repeatedly (likely missing data or incorrect parameters).</b>")
                     tool_was_executed = False
                     break
                     
@@ -204,15 +204,13 @@ class AtQueryDockWidget(QtWidgets.QDockWidget):
                         )
                     
                     if "error" in output.lower():
-                        consecutive_errors += 1
-                    else:
-                        consecutive_errors = 0
+                        total_errors += 1
                         
                     tool_outputs.append({"role": "tool", "content": output, "tool_call_id": tc.get("id")})
                 
                 current_turn_history.extend(tool_outputs)
 
-            if consecutive_errors < 2:
+            if total_errors < 2:
                 tool_was_executed = bool(gis_tools_called)
             
             # ── POST-LOOP FALLBACK ──────────────────────────────────────────
