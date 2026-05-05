@@ -5,6 +5,9 @@ import re
 # --- Global Skill Registry (Caches implementation code) ---
 SKILL_IMPLEMENTATIONS = {}
 
+# --- Community Toolbox Path ---
+_COMMUNITY_TOOLBOX_PATH = os.path.join(os.path.dirname(__file__), 'community_toolbox.json')
+
 def _get_base_dir():
     return os.path.dirname(__file__)
 
@@ -53,6 +56,7 @@ def _load_catalog_from_md():
     return catalog
 
 def identify_toolboxes(query):
+    """Returns list of matching built-in toolbox names."""
     catalog = _load_catalog_from_md()
     query_clean = query.lower()
     matches = []
@@ -62,6 +66,74 @@ def identify_toolboxes(query):
                 matches.append(name)
                 break
     return list(set(matches))
+
+
+def get_available_toolboxes_summary() -> str:
+    """
+    Returns a human-readable, specific list of all built-in toolboxes
+    and their keywords — used in the fallback confirmation dialog.
+    """
+    catalog = _load_catalog_from_md()
+    lines = []
+    for name, info in catalog.items():
+        kws = ', '.join(info['keywords'][:5])  # Show first 5 keywords
+        lines.append(f"• {name}: [{kws}]")
+    return '\n'.join(lines)
+
+
+def load_community_toolbox() -> list:
+    """
+    Loads tools from community_toolbox.json.
+    Returns list of Ollama-compatible tool schemas and caches implementations.
+    """
+    if not os.path.exists(_COMMUNITY_TOOLBOX_PATH):
+        return []
+    try:
+        with open(_COMMUNITY_TOOLBOX_PATH, 'r', encoding='utf-8') as f:
+            registry = json.load(f)
+        schemas = []
+        for tool in registry.get('tools', []):
+            schema = tool.get('schema')
+            impl = tool.get('implementation')
+            name = tool.get('name')
+            if schema and name:
+                schemas.append({"type": "function", "function": schema})
+                if impl:
+                    SKILL_IMPLEMENTATIONS[name] = impl
+        return schemas
+    except Exception as e:
+        print(f"[AtQuery] Failed to load community toolbox: {e}")
+        return []
+
+
+def identify_community_toolbox(query: str) -> list:
+    """
+    Keyword-matches the query against community toolbox entries.
+    Returns list of matching tool schemas.
+    """
+    if not os.path.exists(_COMMUNITY_TOOLBOX_PATH):
+        return []
+    try:
+        with open(_COMMUNITY_TOOLBOX_PATH, 'r', encoding='utf-8') as f:
+            registry = json.load(f)
+        query_clean = query.lower()
+        matched_schemas = []
+        for tool in registry.get('tools', []):
+            keywords = tool.get('keywords', [])
+            for kw in keywords:
+                if re.search(rf'\b{re.escape(kw.lower())}\b', query_clean):
+                    schema = tool.get('schema')
+                    name = tool.get('name')
+                    impl = tool.get('implementation')
+                    if schema and name:
+                        matched_schemas.append({"type": "function", "function": schema})
+                        if impl:
+                            SKILL_IMPLEMENTATIONS[name] = impl
+                    break
+        return matched_schemas
+    except Exception as e:
+        print(f"[AtQuery] Community toolbox match failed: {e}")
+        return []
 
 # --- Core API ---
 
@@ -113,5 +185,17 @@ CONTEXT AWARENESS:
 - If the user refers to "this layer", "current layer", or "the active layer", ALWAYS call 'get_active_layer' first to identify it.
 """
 
+FORCED_EXECUTION_SYSTEM_PROMPT = """
+You are "AtQuery", a QGIS AI Agent created by Adela C.
+All available toolboxes have been pre-loaded. You MUST pick the most relevant tool
+and call it immediately. Do NOT ask for confirmation. Do NOT explain.
+Just call the best matching tool with appropriate parameters derived from the user query.
+"""
+
 def get_system_prompt():
     return BASE_SYSTEM_PROMPT
+
+
+def get_forced_execution_prompt():
+    """System prompt used when forcing direct execution after user confirms Y."""
+    return FORCED_EXECUTION_SYSTEM_PROMPT

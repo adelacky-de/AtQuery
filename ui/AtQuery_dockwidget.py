@@ -14,7 +14,11 @@ from qgis.core import QgsProject, QgsMessageLog, QgsRectangle, QgsGeometry, QgsF
 from qgis.utils import iface
 import processing
 
-from ..core.ai_brain import get_base_tools, get_toolbox_skills, get_system_prompt, identify_toolboxes
+from ..core.ai_brain import (
+    get_base_tools, get_toolbox_skills, get_system_prompt, get_forced_execution_prompt,
+    identify_toolboxes, identify_community_toolbox, load_community_toolbox,
+    get_available_toolboxes_summary
+)
 
 class AtQueryDockWidget(QtWidgets.QDockWidget):
     closingPlugin = QtCore.pyqtSignal()
@@ -129,12 +133,19 @@ class AtQueryDockWidget(QtWidgets.QDockWidget):
         current_turn_history = [{"role": "user", "content": user_text}]
         active_tools = get_base_tools()
         
-        # Pre-load based on keywords
+        # Pre-load built-in toolboxes by keyword match
         detected = identify_toolboxes(user_text)
         for tb in detected:
             skills = get_toolbox_skills(tb)
             if skills: active_tools.extend(skills)
         
+        # Pre-load community toolbox keyword matches
+        community_matches = identify_community_toolbox(user_text)
+        if community_matches:
+            active_tools.extend(community_matches)
+        
+        tool_was_executed = False
+
         try:
             for step in range(5):
                 combined_history = self.conversation_history[-6:] + current_turn_history
@@ -145,24 +156,137 @@ class AtQueryDockWidget(QtWidgets.QDockWidget):
                     content = ai_msg.get("content", "").strip()
                     if not content and step > 0:
                         content = "Action completed successfully."
+                        tool_was_executed = True
                     elif not content:
-                        content = "I'm sorry, I couldn't process that request. Please try again."
+                        content = None  # Will trigger fallback below
+                    else:
+                        tool_was_executed = True
                     
-                    self.handle_ai_response(content, ai_msg.get("suggested_queries"))
+                    if content:
+                        self.handle_ai_response(content, ai_msg.get("suggested_queries"))
                     break
 
                 tool_outputs = []
                 for tc in ai_msg["tool_calls"]:
                     output = self.handle_tool_call(json.dumps(tc))
-                    if tc.get("function", {}).get("name") == "load_toolbox_skills":
+                    tool_name = tc.get("function", {}).get("name", "")
+                    if tool_name == "load_toolbox_skills":
                         skills = json.loads(output)
                         if isinstance(skills, list): active_tools.extend(skills)
                     tool_outputs.append({"role": "tool", "content": output, "tool_call_id": tc.get("id")})
+                    tool_was_executed = True
                 current_turn_history.extend(tool_outputs)
             
-            self.conversation_history.extend(current_turn_history)
+            # ── POST-LOOP FALLBACK ──────────────────────────────────────────
+            if not tool_was_executed:
+                self._handle_no_skill_fallback(user_text, current_turn_history)
+            else:
+                self.conversation_history.extend(current_turn_history)
+
         except Exception as e:
             self.chat_display.append(f"<br><b>Error:</b> {str(e)}")
+
+    def _handle_no_skill_fallback(self, query: str, current_turn_history: list):
+        """
+        Called when the 5-step loop finishes without executing any tool.
+        Tier 1: Check community toolbox (already done in _send_query pre-load).
+        Tier 2: Show specific confirm dialog — list available toolboxes.
+        Tier 3: Y → direct force execute; N → LLM synthesis + community register.
+        """
+        from ..core.ai_brain import get_base_tools, _load_catalog_from_md, get_toolbox_skills
+        from ..core.web_search import synthesize_and_register
+
+        # Build the specific dialog message
+        toolboxes_summary = get_available_toolboxes_summary()
+        msg_box = QtWidgets.QMessageBox(self)
+        msg_box.setWindowTitle("AtQuery — No Matching Skill Found")
+        msg_box.setIcon(QtWidgets.QMessageBox.Question)
+        msg_box.setText(
+            f"<b>No skill matched your request:</b><br><i>\"{query}\"</i><br><br>"
+            f"AtQuery currently supports these toolboxes:<br>"
+            f"<pre style='font-size:11px'>{toolboxes_summary}</pre>"
+            f"<br>Is your request related to one of the above?"
+        )
+        yes_btn = msg_box.addButton("Yes — Execute Best Match", QtWidgets.QMessageBox.YesRole)
+        no_btn  = msg_box.addButton("No — Search & Learn New Skill", QtWidgets.QMessageBox.NoRole)
+        msg_box.exec_()
+
+        if msg_box.clickedButton() == yes_btn:
+            # ── Y: DIRECT FORCE EXECUTE ─────────────────────────────────────
+            # Load ALL built-in toolboxes + community into a single tool set
+            self.chat_display.append("<i>⚡ Force-loading all toolboxes and executing best match...</i>")
+            QtWidgets.QApplication.processEvents()
+
+            catalog = _load_catalog_from_md()
+            forced_tools = get_base_tools()
+            for tb_name in catalog.keys():
+                forced_tools.extend(get_toolbox_skills(tb_name))
+            forced_tools.extend(load_community_toolbox())
+
+            # Single forced-execution AI call with specialized prompt
+            try:
+                payload_messages = [
+                    {"role": "system", "content": get_forced_execution_prompt()},
+                    {"role": "user",   "content": query}
+                ]
+                ai_msg = self._get_ai_response(payload_messages, forced_tools)
+
+                if ai_msg.get("tool_calls"):
+                    tool_outputs = []
+                    for tc in ai_msg["tool_calls"]:
+                        output = self.handle_tool_call(json.dumps(tc))
+                        tool_outputs.append({"role": "tool", "content": output, "tool_call_id": tc.get("id")})
+                    # Get final summary from AI
+                    final_messages = payload_messages + [ai_msg] + tool_outputs
+                    final_msg = self._get_ai_response(final_messages, forced_tools)
+                    content = final_msg.get("content", "Best-match execution completed.")
+                else:
+                    content = ai_msg.get("content", "I executed the closest available skill.")
+                
+                self.handle_ai_response(content)
+                current_turn_history.extend([ai_msg])
+            except Exception as e:
+                self.chat_display.append(f"<br><b>Force-execute error:</b> {str(e)}")
+
+        else:
+            # ── N: SYNTHESIZE + REGISTER NEW TOOL ──────────────────────────
+            self.chat_display.append(
+                "<i>🔍 No existing match. Synthesizing a new skill from AI knowledge...</i>"
+            )
+            QtWidgets.QApplication.processEvents()
+
+            tool_data = synthesize_and_register(query)
+
+            if tool_data:
+                self.chat_display.append(
+                    f"<br>✅ <b>New skill learned:</b> <code>{tool_data['name']}</code><br>"
+                    f"<i>{tool_data['description']}</i><br>"
+                    f"📧 Notification sent to adelacky.de@gmail.com<br>"
+                    f"🗂️ Saved to <code>community_toolbox.json</code> for future use."
+                )
+                # Now execute the newly synthesized tool immediately
+                try:
+                    from ..core.ai_brain import SKILL_IMPLEMENTATIONS
+                    impl_code = SKILL_IMPLEMENTATIONS.get(tool_data['name'])
+                    if impl_code:
+                        local_context = {
+                            'self': self, 'args': {}, 'QgsProject': __import__('qgis.core', fromlist=['QgsProject']).QgsProject,
+                            'processing': __import__('processing'), 'json': json, 'result': None,
+                            'iface': self.iface, 'canvas': self.iface.mapCanvas()
+                        }
+                        exec(impl_code, globals(), local_context)
+                        r = local_context.get('result')
+                        if r:
+                            self.chat_display.append(f"<br>▶️ <b>Result:</b> {json.dumps(r)}")
+                except Exception as ex:
+                    self.chat_display.append(f"<br>⚠️ Skill saved but execution needs review: {str(ex)}")
+            else:
+                self.chat_display.append(
+                    "<br>⚠️ Could not synthesize a skill for this request. "
+                    "Please check your Ollama connection and try again."
+                )
+
+        self.conversation_history.extend(current_turn_history)
 
     def _get_ai_response(self, messages, tools):
         sanitized = []
