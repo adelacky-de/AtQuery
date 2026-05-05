@@ -107,11 +107,24 @@ class AtQueryDockWidget(QtWidgets.QDockWidget):
         self.chat_display.setHtml(welcome_html)
         
         self.user_input = QtWidgets.QLineEdit()
-        self.user_input.setPlaceholderText("Enter request...")
+        self.user_input.setPlaceholderText("Ask a question...")
         self.user_input.returnPressed.connect(self._send_query)
         
+        self.btn_force = QtWidgets.QPushButton("⚡ Best Match")
+        self.btn_force.setToolTip("Force execute the best available skill for the last query")
+        self.btn_learn = QtWidgets.QPushButton("🔍 Learn")
+        self.btn_learn.setToolTip("Search and learn a new skill from AI")
+        
+        self.btn_force.clicked.connect(lambda: getattr(self, 'last_user_query', None) and self._handle_no_skill_fallback(self.last_user_query, [], force_yes=True))
+        self.btn_learn.clicked.connect(lambda: getattr(self, 'last_user_query', None) and self._handle_no_skill_fallback(self.last_user_query, [], force_no=True))
+        
+        input_layout = QtWidgets.QHBoxLayout()
+        input_layout.addWidget(self.user_input)
+        input_layout.addWidget(self.btn_force)
+        input_layout.addWidget(self.btn_learn)
+        
         layout.addWidget(self.chat_display)
-        layout.addWidget(self.user_input)
+        layout.addLayout(input_layout)
         self.layout_stack.addWidget(self.chat_widget)
 
     def check_ollama_status(self):
@@ -125,10 +138,16 @@ class AtQueryDockWidget(QtWidgets.QDockWidget):
         user_text = self.user_input.text().strip()
         if not user_text: return
         
+        self.last_user_query = user_text
+        
         user_bubble = f"""
-        <div style="background-color: #E3F2FD; color: #000; padding: 10px; border-radius: 8px; margin: 5px 0;">
-            <b>You:</b> {user_text}
-        </div>
+        <table width="100%" cellspacing="0" cellpadding="8" border="0" style="margin-top: 5px; margin-bottom: 5px;">
+            <tr>
+                <td style="background-color: #E3F2FD; color: #000; border-radius: 8px;">
+                    <b>You:</b> {user_text}
+                </td>
+            </tr>
+        </table>
         """
         self.chat_display.append(user_bubble)
         self.user_input.clear()
@@ -201,9 +220,9 @@ class AtQueryDockWidget(QtWidgets.QDockWidget):
         except Exception as e:
             self.chat_display.append(f"<br><b>Error:</b> {str(e)}")
 
-    def _handle_no_skill_fallback(self, query: str, current_turn_history: list):
+    def _handle_no_skill_fallback(self, query: str, current_turn_history: list, force_yes=False, force_no=False):
         """
-        Called when the 5-step loop finishes without executing any tool.
+        Called when the 5-step loop finishes without executing any tool, OR manually via buttons.
         Tier 1: Check community toolbox (already done in _send_query pre-load).
         Tier 2: Show specific confirm dialog — list available toolboxes.
         Tier 3: Y → direct force execute; N → LLM synthesis + community register.
@@ -211,22 +230,28 @@ class AtQueryDockWidget(QtWidgets.QDockWidget):
         from ..core.ai_brain import get_base_tools, _load_catalog_from_md, get_toolbox_skills
         from ..core.web_search import synthesize_and_register
 
-        # Build the specific dialog message
-        toolboxes_summary = get_available_toolboxes_summary()
-        msg_box = QtWidgets.QMessageBox(self)
-        msg_box.setWindowTitle("AtQuery — No Matching Skill Found")
-        msg_box.setIcon(QtWidgets.QMessageBox.Question)
-        msg_box.setText(
-            f"<b>No skill matched your request:</b><br><i>\"{query}\"</i><br><br>"
-            f"AtQuery currently supports these toolboxes:<br>"
-            f"<pre style='font-size:11px'>{toolboxes_summary}</pre>"
-            f"<br>Is your request related to one of the above?"
-        )
-        yes_btn = msg_box.addButton("Yes — Execute Best Match", QtWidgets.QMessageBox.YesRole)
-        no_btn  = msg_box.addButton("No — Search & Learn New Skill", QtWidgets.QMessageBox.NoRole)
-        msg_box.exec_()
+        if not force_yes and not force_no:
+            toolboxes_summary = get_available_toolboxes_summary()
+            msg_box = QtWidgets.QMessageBox(self)
+            msg_box.setWindowTitle("AtQuery — No Matching Skill Found")
+            msg_box.setIcon(QtWidgets.QMessageBox.Question)
+            msg_box.setText(
+                f"<b>No skill matched your request:</b><br><i>\"{query}\"</i><br><br>"
+                f"AtQuery currently supports these toolboxes:<br>"
+                f"<pre style='font-size:11px'>{toolboxes_summary}</pre>"
+                f"<br>Is your request related to one of the above?"
+            )
+            yes_btn = msg_box.addButton("Yes — Execute Best Match", QtWidgets.QMessageBox.YesRole)
+            no_btn  = msg_box.addButton("No — Search & Learn New Skill", QtWidgets.QMessageBox.NoRole)
+            msg_box.exec_()
+            
+            clicked_yes = (msg_box.clickedButton() == yes_btn)
+            clicked_no = (msg_box.clickedButton() == no_btn)
+        else:
+            clicked_yes = force_yes
+            clicked_no = force_no
 
-        if msg_box.clickedButton() == yes_btn:
+        if clicked_yes:
             # ── Y: DIRECT FORCE EXECUTE ─────────────────────────────────────
             # Load ALL built-in toolboxes + community into a single tool set
             self.chat_display.append("<i>⚡ Force-loading all toolboxes and executing best match...</i>")
@@ -274,12 +299,16 @@ class AtQueryDockWidget(QtWidgets.QDockWidget):
 
             if tool_data:
                 skill_bubble = f"""
-                <div style="background-color: #FFF3E0; color: #000; padding: 10px; border-radius: 8px; margin: 5px 0;">
-                    ✅ <b>New skill learned:</b> <code>{tool_data['name']}</code><br>
-                    <i>{tool_data['description']}</i><br>
-                    📧 Developer notified (via Formspree webhook).<br>
-                    🗂️ Saved to <code>community_toolbox.json</code> for future use.
-                </div>
+                <table width="100%" cellspacing="0" cellpadding="8" border="0" style="margin-top: 5px; margin-bottom: 5px;">
+                    <tr>
+                        <td style="background-color: #FFF3E0; color: #000; border-radius: 8px;">
+                            ✅ <b>New skill learned:</b> <code>{tool_data['name']}</code><br>
+                            <i>{tool_data['description']}</i><br>
+                            📧 Developer notified (via Formspree webhook).<br>
+                            🗂️ Saved to <code>community_toolbox.json</code> for future use.
+                        </td>
+                    </tr>
+                </table>
                 """
                 self.chat_display.append(skill_bubble)
                 # Now execute the newly synthesized tool immediately
@@ -411,9 +440,13 @@ class AtQueryDockWidget(QtWidgets.QDockWidget):
         text = re.sub(r'\.(?=[A-Za-z])', '. ', text)
         
         ai_bubble = f"""
-        <div style="background-color: #F5F5F5; color: #000; padding: 10px; border-radius: 8px; margin: 5px 0;">
-            💡 <b>AtQuery:</b> {text}
-        </div>
+        <table width="100%" cellspacing="0" cellpadding="8" border="0" style="margin-top: 5px; margin-bottom: 5px;">
+            <tr>
+                <td style="background-color: #F5F5F5; color: #000; border-radius: 8px;">
+                    💡 <b>AtQuery:</b> {text}
+                </td>
+            </tr>
+        </table>
         """
         self.chat_display.append(ai_bubble)
         if suggested:
