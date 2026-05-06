@@ -481,6 +481,9 @@ class AtQueryDockWidget(QtWidgets.QDockWidget):
         # Add space after periods if missing (e.g. "Sentence.Next sentence" -> "Sentence. Next sentence")
         text = re.sub(r'\.(?=[A-Za-z])', '. ', text)
         
+        # Convert newlines to <br> so that bullet points and line breaks render correctly in HTML
+        text = text.replace('\n', '<br>')
+        
         ai_bubble = f"""
         <table width="100%" cellspacing="0" cellpadding="8" border="0" style="margin-top: 5px; margin-bottom: 5px;">
             <tr>
