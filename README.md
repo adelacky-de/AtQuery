@@ -10,6 +10,7 @@
 *   **Agentic Reasoning (Mini-MCP)**: Powered by a dynamic tool-calling loop. The AI checks your layers, inspects their attributes, and chooses the right GIS tool autonomously.
 *   **Local & Private**: Runs entirely on your machine using **Ollama**. Your data never leaves your computer, ensuring total privacy and zero API costs.
 *   **Modular Skill Library**: Capabilities are organized into "Toolboxes" (Markdown files). The system only loads the skills relevant to your specific request.
+*   **Self-Expanding Skill Library (Online Search)**: If AtQuery lacks a built-in skill, click "Search & Learn New Skill" to let the AI automatically synthesize a new QGIS tool from its knowledge and save it to your local `community_toolbox.json` store for future use.
 *   **Live Code Execution**: See the AI's generated PyQGIS code in real-time. It's not just an assistant; it's a way to learn PyQGIS.
 
 ---

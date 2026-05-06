@@ -4,35 +4,5 @@
     "version": "1.0",
     "notify_email": "adelacky.de@gmail.com"
   },
-  "tools": [
-    {
-      "name": "calculate_zonal_statistics_for_elevation",
-      "description": "Calculate zonal statistics for a given raster elevation layer grouped by the AdminArea_DCD administrative areas.",
-      "keywords": [
-        "zonal statistics",
-        "elevation analysis",
-        "admin area"
-      ],
-      "schema": {
-        "name": "calculate_zonal_statistics_for_elevation",
-        "description": "Calculate zonal statistics for a given raster elevation layer grouped by the AdminArea_DCD administrative areas.",
-        "parameters": {
-          "type": "object",
-          "properties": {
-            "layer_name": {
-              "type": "string",
-              "description": "Name of the target raster layer containing elevation data."
-            }
-          },
-          "required": [
-            "layer_name"
-          ]
-        }
-      },
-      "implementation": "\n# Python code using QGIS API\nimport processing\nlayer = self._resolve_layer(args['layer_name'])\nresult = processing.run('qgis:zonalstatistics', {'INPUT': layer, 'ZOOM_LEVEL': 0, 'OUTPUT': None})\nif result['OUTPUT'] is not None:\n    result = {'status': 'success'}\nelse:\n    result = {'status': 'failure', 'message': 'Failed to calculate zonal statistics'}",
-      "added_at": "2026-05-05T10:25:05",
-      "source": "llm_synthesis",
-      "original_query": "calculate zonal statistics for raster elevation using AdminArea_DCD zones"
-    }
-  ]
+  "tools": []
 }
