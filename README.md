@@ -37,6 +37,15 @@ AtQuery can handle a wide variety of tasks. Here are some things you can try:
 - *"Create a 500-meter buffer around the selected bus stops."*
 - *"Calculate the slope from the 'DEM' raster layer."*
 - *"Clip the 'roads' layer using the 'boundary' polygon."*
+- *"Join the 'demographics' table to the 'counties' layer using an Inner Join."*
+- *"Extract features from the 'parcels' layer where 'Zoning' = 'Commercial'."*
+- *"Create a TIN interpolation surface from the elevation points layer."*
+
+### 💾 Export & Map Canvas
+- *"Export the 'buildings' layer to a GeoJSON file."*
+- *"Save the 'roads' layer as a PostgreSQL / PostGIS database file."*
+- *"Save the current map view as a PNG image."*
+- *"Zoom the map to coordinate 114.1, 22.3."*
 
 ---
 
