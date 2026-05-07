@@ -403,3 +403,137 @@ if layer:
 else:
     result = {"error": "Layer not found"}
 ```
+
+### Tool: processing_run_native_extent_to_layer
+- **Description**: Calculates the extent (bounding box) of a layer and creates a polygon.
+- **Schema**:
+```json
+{
+    "name": "processing_run_native_extent_to_layer",
+    "description": "Calculates the extent (bounding box) of a layer and creates a polygon. If 'use_canvas_extent' is true, it uses the current map canvas extent instead.",
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "layer_name": {"type": "string", "description": "The layer to get the extent from."},
+            "use_canvas_extent": {"type": "boolean", "description": "Set to true to use the current map canvas view extent instead of a specific layer's extent."}
+        },
+        "required": ["layer_name"]
+    }
+}
+```
+- **Implementation**:
+```python
+import processing
+from qgis.core import QgsProject
+
+if args.get('use_canvas_extent', False):
+    extent_str = self.iface.mapCanvas().extent().toString() + f" [{self.iface.mapCanvas().mapSettings().destinationCrs().authid()}]"
+    out_name = "canvas_extent"
+    res = processing.run("native:extenttolayer", {
+        'INPUT': extent_str,
+        'OUTPUT': 'memory:'
+    })
+    out_layer = res['OUTPUT']
+    out_layer.setName(out_name)
+    QgsProject.instance().addMapLayer(out_layer)
+    result = {"status": "success", "layer_name": out_name}
+else:
+    layer = self._resolve_layer(args['layer_name'])
+    if layer:
+        out_name = f"{layer.name()}_extent"
+        res = processing.run("native:extenttolayer", {
+            'INPUT': layer,
+            'OUTPUT': 'memory:'
+        })
+        out_layer = res['OUTPUT']
+        out_layer.setName(out_name)
+        QgsProject.instance().addMapLayer(out_layer)
+        result = {"status": "success", "layer_name": out_name}
+    else:
+        result = {"error": "Layer not found"}
+```
+
+### Tool: processing_run_native_extract_by_expression
+- **Description**: Extracts features from a vector layer matching a SQL expression.
+- **Schema**:
+```json
+{
+    "name": "processing_run_native_extract_by_expression",
+    "description": "Extracts features from a vector layer matching a SQL expression into a new layer.",
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "layer_name": {"type": "string"},
+            "expression": {"type": "string", "description": "SQL expression to filter features."}
+        },
+        "required": ["layer_name", "expression"]
+    }
+}
+```
+- **Implementation**:
+```python
+import processing
+layer = self._resolve_layer(args['layer_name'])
+if layer:
+    out_name = f"{layer.name()}_extracted"
+    res = processing.run("native:extractbyexpression", {
+        'INPUT': layer,
+        'EXPRESSION': args['expression'],
+        'OUTPUT': 'memory:'
+    })
+    out_layer = res['OUTPUT']
+    out_layer.setName(out_name)
+    QgsProject.instance().addMapLayer(out_layer)
+    result = {"status": "success", "layer_name": out_name}
+else:
+    result = {"error": "Layer not found"}
+```
+
+### Tool: processing_run_native_join_attributes_by_field
+- **Description**: Performs a table join between two layers using a common key field.
+- **Schema**:
+```json
+{
+    "name": "processing_run_native_join_attributes_by_field",
+    "description": "Performs an attribute table join between an input layer and a join layer using a common key field.",
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "input_layer_name": {"type": "string"},
+            "input_field": {"type": "string", "description": "Key field in the input layer."},
+            "join_layer_name": {"type": "string"},
+            "join_field": {"type": "string", "description": "Key field in the join layer."},
+            "inner_join": {"type": "boolean", "description": "Set to true to discard records that don't match (Inner Join), or false to keep all input records (Left Outer Join)."}
+        },
+        "required": ["input_layer_name", "input_field", "join_layer_name", "join_field", "inner_join"]
+    }
+}
+```
+- **Implementation**:
+```python
+import processing
+input_layer = self._resolve_layer(args['input_layer_name'])
+join_layer = self._resolve_layer(args['join_layer_name'])
+
+if input_layer and join_layer:
+    out_name = f"{input_layer.name()}_joined"
+    discard_nonmatching = args.get('inner_join', False)
+    
+    res = processing.run("native:joinattributestable", {
+        'INPUT': input_layer,
+        'FIELD': args['input_field'],
+        'INPUT_2': join_layer,
+        'FIELD_2': args['join_field'],
+        'FIELDS_TO_COPY': [],
+        'METHOD': 1,
+        'DISCARD_NONMATCHING': discard_nonmatching,
+        'PREFIX': 'join_',
+        'OUTPUT': 'memory:'
+    })
+    out_layer = res['OUTPUT']
+    out_layer.setName(out_name)
+    QgsProject.instance().addMapLayer(out_layer)
+    result = {"status": "success", "layer_name": out_name}
+else:
+    result = {"error": "One or both layers not found"}
+```
