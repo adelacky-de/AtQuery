@@ -246,3 +246,160 @@ if input_layer and join_layer:
 else:
     result = {"error": "One or both layers not found"}
 ```
+
+### Tool: processing_run_native_clip
+- **Description**: Clips a vector layer using the polygons of an overlay layer.
+- **Schema**:
+```json
+{
+    "name": "processing_run_native_clip",
+    "description": "Runs the QGIS native clip algorithm.",
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "input_layer_name": {"type": "string"},
+            "overlay_layer_name": {"type": "string"}
+        },
+        "required": ["input_layer_name", "overlay_layer_name"]
+    }
+}
+```
+- **Implementation**:
+```python
+import processing
+input_layer = self._resolve_layer(args['input_layer_name'])
+overlay_layer = self._resolve_layer(args['overlay_layer_name'])
+
+if input_layer and overlay_layer:
+    out_name = f"{input_layer.name()}_clipped"
+    res = processing.run("native:clip", {
+        'INPUT': input_layer,
+        'OVERLAY': overlay_layer,
+        'OUTPUT': 'memory:'
+    })
+    out_layer = res['OUTPUT']
+    out_layer.setName(out_name)
+    QgsProject.instance().addMapLayer(out_layer)
+    result = {"status": "success", "layer_name": out_name}
+else:
+    result = {"error": "One or both layers not found"}
+```
+
+### Tool: processing_run_native_centroids
+- **Description**: Creates a new point layer representing the centroids of the input features.
+- **Schema**:
+```json
+{
+    "name": "processing_run_native_centroids",
+    "description": "Runs the QGIS native centroids algorithm.",
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "layer_name": {"type": "string"}
+        },
+        "required": ["layer_name"]
+    }
+}
+```
+- **Implementation**:
+```python
+import processing
+layer = self._resolve_layer(args['layer_name'])
+
+if layer:
+    out_name = f"{layer.name()}_centroids"
+    res = processing.run("native:centroids", {
+        'INPUT': layer,
+        'ALL_PARTS': False,
+        'OUTPUT': 'memory:'
+    })
+    out_layer = res['OUTPUT']
+    out_layer.setName(out_name)
+    QgsProject.instance().addMapLayer(out_layer)
+    result = {"status": "success", "layer_name": out_name}
+else:
+    result = {"error": "Layer not found"}
+```
+
+### Tool: processing_run_native_intersection
+- **Description**: Extracts the overlapping portions of features in the input and overlay layers, keeping attributes from both.
+- **Schema**:
+```json
+{
+    "name": "processing_run_native_intersection",
+    "description": "Runs the QGIS native intersection algorithm.",
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "input_layer_name": {"type": "string"},
+            "overlay_layer_name": {"type": "string"}
+        },
+        "required": ["input_layer_name", "overlay_layer_name"]
+    }
+}
+```
+- **Implementation**:
+```python
+import processing
+input_layer = self._resolve_layer(args['input_layer_name'])
+overlay_layer = self._resolve_layer(args['overlay_layer_name'])
+
+if input_layer and overlay_layer:
+    out_name = f"{input_layer.name()}_intersected"
+    res = processing.run("native:intersection", {
+        'INPUT': input_layer,
+        'OVERLAY': overlay_layer,
+        'INPUT_FIELDS': [],
+        'OVERLAY_FIELDS': [],
+        'OUTPUT': 'memory:'
+    })
+    out_layer = res['OUTPUT']
+    out_layer.setName(out_name)
+    QgsProject.instance().addMapLayer(out_layer)
+    result = {"status": "success", "layer_name": out_name}
+else:
+    result = {"error": "One or both layers not found"}
+```
+
+### Tool: processing_run_native_reproject
+- **Description**: Reprojects a vector layer to a different Coordinate Reference System (CRS).
+- **Schema**:
+```json
+{
+    "name": "processing_run_native_reproject",
+    "description": "Runs the QGIS native reprojectlayer algorithm.",
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "layer_name": {"type": "string"},
+            "target_crs": {"type": "string", "description": "Target CRS string, e.g. 'EPSG:4326' or 'EPSG:3857'."}
+        },
+        "required": ["layer_name", "target_crs"]
+    }
+}
+```
+- **Implementation**:
+```python
+import processing
+from qgis.core import QgsCoordinateReferenceSystem
+
+layer = self._resolve_layer(args['layer_name'])
+if layer:
+    crs_str = args['target_crs']
+    crs = QgsCoordinateReferenceSystem(crs_str)
+    if not crs.isValid():
+        result = {"error": f"Invalid CRS: {crs_str}"}
+    else:
+        out_name = f"{layer.name()}_{crs_str.replace(':', '')}"
+        res = processing.run("native:reprojectlayer", {
+            'INPUT': layer,
+            'TARGET_CRS': crs,
+            'OUTPUT': 'memory:'
+        })
+        out_layer = res['OUTPUT']
+        out_layer.setName(out_name)
+        QgsProject.instance().addMapLayer(out_layer)
+        result = {"status": "success", "layer_name": out_name}
+else:
+    result = {"error": "Layer not found"}
+```
