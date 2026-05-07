@@ -537,3 +537,220 @@ if input_layer and join_layer:
 else:
     result = {"error": "One or both layers not found"}
 ```
+
+### Tool: processing_run_native_symmetricaldifference
+- **Description**: Extracts the non-overlapping portions of features in the input and overlay layers.
+- **Schema**:
+```json
+{
+    "name": "processing_run_native_symmetricaldifference",
+    "description": "Runs the QGIS native symmetrical difference algorithm (finds areas that do NOT overlap).",
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "input_layer_name": {"type": "string"},
+            "overlay_layer_name": {"type": "string"}
+        },
+        "required": ["input_layer_name", "overlay_layer_name"]
+    }
+}
+```
+- **Implementation**:
+```python
+import processing
+input_layer = self._resolve_layer(args['input_layer_name'])
+overlay_layer = self._resolve_layer(args['overlay_layer_name'])
+
+if input_layer and overlay_layer:
+    out_name = f"{input_layer.name()}_symdiff"
+    res = processing.run("native:symmetricaldifference", {
+        'INPUT': input_layer,
+        'OVERLAY': overlay_layer,
+        'OUTPUT': 'memory:'
+    })
+    out_layer = res['OUTPUT']
+    out_layer.setName(out_name)
+    QgsProject.instance().addMapLayer(out_layer)
+    result = {"status": "success", "layer_name": out_name}
+else:
+    result = {"error": "One or both layers not found"}
+```
+
+### Tool: processing_run_native_splitvectorlayer
+- **Description**: Splits a single layer into multiple layers based on a unique attribute field.
+- **Schema**:
+```json
+{
+    "name": "processing_run_native_splitvectorlayer",
+    "description": "Runs the QGIS native split vector layer algorithm.",
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "layer_name": {"type": "string"},
+            "field": {"type": "string", "description": "The attribute field to split by."},
+            "output_directory": {"type": "string", "description": "Directory to save the split files. If not provided, saves to project directory."}
+        },
+        "required": ["layer_name", "field"]
+    }
+}
+```
+- **Implementation**:
+```python
+import processing, os
+from qgis.core import QgsProject
+
+layer = self._resolve_layer(args['layer_name'])
+if layer:
+    out_dir = args.get('output_directory', '')
+    if not out_dir:
+        out_dir = QgsProject.instance().homePath()
+        if not out_dir: out_dir = os.path.expanduser("~")
+        out_dir = os.path.join(out_dir, f"{layer.name()}_split")
+        if not os.path.exists(out_dir): os.makedirs(out_dir)
+        
+    res = processing.run("native:splitvectorlayer", {
+        'INPUT': layer,
+        'FIELD': args['field'],
+        'FILE_TYPE': 1,
+        'OUTPUT': out_dir
+    })
+    result = {"status": "success", "saved_to": out_dir}
+else:
+    result = {"error": "Layer not found"}
+```
+
+### Tool: processing_run_native_fixgeometries
+- **Description**: Fixes invalid geometries (e.g., self-intersections).
+- **Schema**:
+```json
+{
+    "name": "processing_run_native_fixgeometries",
+    "description": "Runs the QGIS native fix geometries algorithm.",
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "layer_name": {"type": "string"}
+        },
+        "required": ["layer_name"]
+    }
+}
+```
+- **Implementation**:
+```python
+import processing
+layer = self._resolve_layer(args['layer_name'])
+if layer:
+    out_name = f"{layer.name()}_fixed"
+    res = processing.run("native:fixgeometries", {
+        'INPUT': layer,
+        'OUTPUT': 'memory:'
+    })
+    out_layer = res['OUTPUT']
+    out_layer.setName(out_name)
+    QgsProject.instance().addMapLayer(out_layer)
+    result = {"status": "success", "layer_name": out_name}
+else:
+    result = {"error": "Layer not found"}
+```
+
+### Tool: processing_run_native_convexhull
+- **Description**: Generates a convex hull around features.
+- **Schema**:
+```json
+{
+    "name": "processing_run_native_convexhull",
+    "description": "Runs the QGIS native convex hull algorithm.",
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "layer_name": {"type": "string"}
+        },
+        "required": ["layer_name"]
+    }
+}
+```
+- **Implementation**:
+```python
+import processing
+layer = self._resolve_layer(args['layer_name'])
+if layer:
+    out_name = f"{layer.name()}_convexhull"
+    res = processing.run("native:convexhull", {
+        'INPUT': layer,
+        'OUTPUT': 'memory:'
+    })
+    out_layer = res['OUTPUT']
+    out_layer.setName(out_name)
+    QgsProject.instance().addMapLayer(out_layer)
+    result = {"status": "success", "layer_name": out_name}
+else:
+    result = {"error": "Layer not found"}
+```
+
+### Tool: processing_run_native_linestopolygons
+- **Description**: Converts line features into polygon features.
+- **Schema**:
+```json
+{
+    "name": "processing_run_native_linestopolygons",
+    "description": "Runs the QGIS native lines to polygons algorithm.",
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "layer_name": {"type": "string"}
+        },
+        "required": ["layer_name"]
+    }
+}
+```
+- **Implementation**:
+```python
+import processing
+layer = self._resolve_layer(args['layer_name'])
+if layer:
+    out_name = f"{layer.name()}_polygons"
+    res = processing.run("native:linestopolygons", {
+        'INPUT': layer,
+        'OUTPUT': 'memory:'
+    })
+    out_layer = res['OUTPUT']
+    out_layer.setName(out_name)
+    QgsProject.instance().addMapLayer(out_layer)
+    result = {"status": "success", "layer_name": out_name}
+else:
+    result = {"error": "Layer not found"}
+```
+
+### Tool: processing_run_native_polygonstolines
+- **Description**: Converts polygon features into line boundary features.
+- **Schema**:
+```json
+{
+    "name": "processing_run_native_polygonstolines",
+    "description": "Runs the QGIS native polygons to lines algorithm.",
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "layer_name": {"type": "string"}
+        },
+        "required": ["layer_name"]
+    }
+}
+```
+- **Implementation**:
+```python
+import processing
+layer = self._resolve_layer(args['layer_name'])
+if layer:
+    out_name = f"{layer.name()}_lines"
+    res = processing.run("native:polygonstolines", {
+        'INPUT': layer,
+        'OUTPUT': 'memory:'
+    })
+    out_layer = res['OUTPUT']
+    out_layer.setName(out_name)
+    QgsProject.instance().addMapLayer(out_layer)
+    result = {"status": "success", "layer_name": out_name}
+else:
+    result = {"error": "Layer not found"}
+```

@@ -12,3 +12,4 @@ Use this catalog to identify which toolbox contains the skills needed for a user
 | **RasterAnalysis** | slope, hillshade, aspect, raster, dem, elevation, calculator | Tools for processing and analyzing raster data. |
 | **WebServices** | wms, wfs, xyz, tiles, google maps, osm, remote, server | Adding layers from web-based services. |
 | **TerrainAnalysis** | tin, interpolation, contours, relief, rugosity | Advanced terrain and surface modeling. |
+| **ExportTools** | export, save as, pdf, csv, geojson, shapefile, database, png, image | Exporting layers and map layouts to files. |

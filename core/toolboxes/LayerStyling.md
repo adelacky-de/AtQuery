@@ -99,3 +99,32 @@ if layer:
 else:
     result = {"error": "Layer not found"}
 ```
+
+### Tool: zoom_to_coordinate
+```json
+{
+  "name": "zoom_to_coordinate",
+  "description": "Pans and zooms the map canvas to a specific X and Y coordinate.",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "x": {"type": "number", "description": "X coordinate (Longitude or Easting)."},
+      "y": {"type": "number", "description": "Y coordinate (Latitude or Northing)."},
+      "scale": {"type": "number", "description": "Optional zoom scale (e.g., 10000). Default is 10000."}
+    },
+    "required": ["x", "y"]
+  }
+}
+```
+
+```python
+from qgis.core import QgsPointXY
+x = float(args['x'])
+y = float(args['y'])
+scale = float(args.get('scale', 10000))
+center = QgsPointXY(x, y)
+self.iface.mapCanvas().setCenter(center)
+self.iface.mapCanvas().zoomScale(scale)
+self.iface.mapCanvas().refresh()
+result = {"status": "success", "message": f"Zoomed to {x}, {y} at scale {scale}"}
+```
