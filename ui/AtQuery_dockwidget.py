@@ -208,6 +208,21 @@ class AtQueryDockWidget(QtWidgets.QDockWidget):
                     if "error" in output.lower():
                         total_errors_in_turn += 1
                         
+                    if "AMBIGUOUS_LAYER:" in output:
+                        try:
+                            err_msg = json.loads(output).get("error", "").replace("AMBIGUOUS_LAYER: ", "")
+                            self.chat_display.append(f"<br>💡 <b>AtQuery:</b> {err_msg}")
+                            self.chat_display.append("<br>Not working? Try: &nbsp;&nbsp;<a href='atquery://best-match' style='text-decoration:none;'>⚡ Force Match</a> &nbsp;&nbsp; <a href='atquery://learn' style='text-decoration:none;'>🔍 Search & Learn</a><br><br><hr>")
+                            
+                            # Save context so the LLM remembers the original command when the button is clicked
+                            self.conversation_history.append({"role": "user", "content": user_text})
+                            self.conversation_history.append({"role": "assistant", "content": "I encountered an ambiguous layer name. Please clarify."})
+                            
+                            scrollbar = self.chat_display.verticalScrollBar()
+                            scrollbar.setValue(scrollbar.maximum())
+                            return
+                        except: pass
+                        
                     tool_outputs.append({"role": "tool", "content": output, "tool_call_id": tc.get("id")})
                 
                 current_turn_history.extend(tool_outputs)
