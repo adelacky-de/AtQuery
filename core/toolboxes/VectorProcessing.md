@@ -67,10 +67,13 @@ else:
 - **Implementation**:
 ```python
 import processing
-layer = self._resolve_layer(args['layer_name'])
+layer = self._resolve_layer(args.get('layer_name', ''))
+if not layer:
+    layer = self.iface.activeLayer()
+
 if layer:
     if layer.selectedFeatureCount() == 0:
-        result = {"error": "No features selected in layer."}
+        result = {"error": f"No features are currently selected in layer '{layer.name()}'."}
     else:
         out_name = args.get('output_name') or f"{layer.name()}_selection"
         res = processing.run("native:saveselectedfeatures", {
