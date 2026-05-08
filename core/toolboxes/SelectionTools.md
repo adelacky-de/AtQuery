@@ -96,3 +96,31 @@ if target_layer and intersect_layer:
 else:
     result = {"error": "One or both layers not found."}
 ```
+
+### Tool: clear_selections
+- **Description**: Clears all feature selections from a specific vector layer.
+- **Schema**:
+```json
+{
+    "name": "clear_selections",
+    "description": "Clears all selected features from a vector layer.",
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "layer_name": {"type": "string"}
+        },
+        "required": ["layer_name"]
+    }
+}
+```
+- **Implementation**:
+```python
+layer = self._resolve_layer(args['layer_name'])
+if layer:
+    layer.removeSelection()
+    layer.triggerRepaint()
+    self.iface.mapCanvas().refresh()
+    result = {"status": "success", "message": f"Selections cleared from {layer.name()}"}
+else:
+    result = {"error": "Layer not found"}
+```

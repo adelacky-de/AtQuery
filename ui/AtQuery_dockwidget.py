@@ -449,9 +449,20 @@ class AtQueryDockWidget(QtWidgets.QDockWidget):
     def _resolve_layer(self, name):
         if not name: return None
         all_layers = list(QgsProject.instance().mapLayers().values())
-        matches = QgsProject.instance().mapLayersByName(name)
-        if matches: return matches[0]
         
+        # 1. Exact Name Match (Case Insensitive)
+        for layer in all_layers:
+            if layer.name().lower() == name.lower():
+                return layer
+                
+        # 2. Substring Match (Case Insensitive)
+        matches = [l for l in all_layers if name.lower() in l.name().lower()]
+        if matches:
+            # Sort by length difference to find the closest match
+            matches.sort(key=lambda l: len(l.name()) - len(name))
+            return matches[0]
+        
+        # 3. Fuzzy Match
         def normalize(s): return re.sub(r'[^a-z0-9]', '', s.lower())
         target = normalize(name)
         if not target: return None

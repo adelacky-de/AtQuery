@@ -42,18 +42,22 @@ else:
         file_name = os.path.join(proj_path, file_name)
         
     driver_map = {
-        'geojson': 'GeoJSON',
-        'csv': 'CSV',
-        'geopackage': 'GPKG',
-        'gpkg': 'GPKG',
-        'shapefile': 'ESRI Shapefile',
-        'esri shapefile': 'ESRI Shapefile',
-        'kml': 'KML',
-        'dxf': 'DXF',
-        'postgresql': 'PostgreSQL',
-        'postgis': 'PostgreSQL'
+        'geojson': ('GeoJSON', '.geojson'),
+        'csv': ('CSV', '.csv'),
+        'geopackage': ('GPKG', '.gpkg'),
+        'gpkg': ('GPKG', '.gpkg'),
+        'shapefile': ('ESRI Shapefile', '.shp'),
+        'esri shapefile': ('ESRI Shapefile', '.shp'),
+        'kml': ('KML', '.kml'),
+        'dxf': ('DXF', '.dxf'),
+        'postgresql': ('PostgreSQL', ''),
+        'postgis': ('PostgreSQL', '')
     }
-    driver_name = driver_map.get(fmt, 'GeoJSON')
+    driver_name, ext = driver_map.get(fmt, ('GeoJSON', '.geojson'))
+    
+    # Force extension if not database
+    if ext and not file_name.lower().endswith(ext):
+        file_name += ext
     
     options = QgsVectorFileWriter.SaveVectorOptions()
     options.driverName = driver_name
