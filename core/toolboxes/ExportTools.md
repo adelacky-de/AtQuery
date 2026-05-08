@@ -14,7 +14,7 @@ Tools for exporting layers and map layouts to files.
         "properties": {
             "layer_name": {"type": "string"},
             "format": {"type": "string", "description": "Format to export to, e.g., 'GeoJSON', 'CSV', 'GeoPackage', 'ESRI Shapefile', 'PostgreSQL'"},
-            "file_name": {"type": "string", "description": "The name of the file to save (e.g., 'output.geojson'). If no path is provided, it saves to the QGIS project directory."}
+            "file_name": {"type": "string", "description": "The name of the file to save (e.g., 'layer_name.geojson'). DO NOT use generic names like 'output.geojson'. If no path is provided, it saves to the QGIS project directory."}
         },
         "required": ["layer_name", "format", "file_name"]
     }
