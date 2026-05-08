@@ -231,6 +231,14 @@ class AtQueryDockWidget(QtWidgets.QDockWidget):
     def _on_chat_anchor_clicked(self, url):
         """Handles clicks on inline fallback buttons inside the chat display."""
         action = url.toString()
+        
+        if action.startswith('atquery://send_message?msg='):
+            from urllib.parse import unquote
+            msg = unquote(action.split('msg=')[1])
+            self.user_input.setText(msg)
+            self._send_query()
+            return
+            
         query = getattr(self, 'last_user_query', None)
         if not query:
             return
@@ -451,16 +459,21 @@ class AtQueryDockWidget(QtWidgets.QDockWidget):
         all_layers = list(QgsProject.instance().mapLayers().values())
         
         # 1. Exact Name Match (Case Insensitive)
-        for layer in all_layers:
-            if layer.name().lower() == name.lower():
-                return layer
+        exact_matches = [l for l in all_layers if l.name().lower() == name.lower()]
+        if len(exact_matches) == 1:
+            return exact_matches[0]
+        elif len(exact_matches) > 1:
+            layer_names = list(set([l.name() for l in exact_matches]))
+            raise Exception(f"AMBIGUOUS_LAYER: Multiple exact matches found for '{name}'. Matching layers: {layer_names}. Ask the user to clarify using the atquery://send_message buttons.")
                 
         # 2. Substring Match (Case Insensitive)
         matches = [l for l in all_layers if name.lower() in l.name().lower()]
-        if matches:
-            # Sort by length difference to find the closest match
-            matches.sort(key=lambda l: len(l.name()) - len(name))
+        if len(matches) == 1:
             return matches[0]
+        elif len(matches) > 1:
+            matches.sort(key=lambda l: len(l.name()) - len(name))
+            layer_names = list(set([l.name() for l in matches[:5]]))
+            raise Exception(f"AMBIGUOUS_LAYER: Multiple layers contain '{name}'. Matching layers: {layer_names}. Ask the user to clarify using the atquery://send_message buttons.")
         
         # 3. Fuzzy Match
         def normalize(s): return re.sub(r'[^a-z0-9]', '', s.lower())
@@ -477,7 +490,14 @@ class AtQueryDockWidget(QtWidgets.QDockWidget):
         
         if potential:
             potential.sort(key=lambda x: x[0])
-            return potential[0][1]
+            best_score = potential[0][0]
+            best_matches = [p[1] for p in potential if p[0] == best_score]
+            if len(best_matches) == 1:
+                return best_matches[0]
+            else:
+                layer_names = list(set([l.name() for l in best_matches[:5]]))
+                raise Exception(f"AMBIGUOUS_LAYER: Multiple fuzzy matches found for '{name}'. Matching layers: {layer_names}. Ask the user to clarify using the atquery://send_message buttons.")
+                
         return None
 
     def handle_ai_response(self, text, suggested=None):

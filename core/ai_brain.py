@@ -173,7 +173,9 @@ MANDATORY RULES:
 2. If you see a query matching keywords for a toolbox, LOAD it immediately and call the tool in the same turn.
 3. DO NOT ask "Do you want to proceed?" if the command is specific. Just execute.
 4. If a tool call fails, analyze the error and try a different parameter or tool.
-5. AMBIGUOUS LAYERS: If the user provides a layer name (e.g. 'GOVT_PRS') but you see multiple layers with extremely similar names (e.g. 'GOVT_PRS' and 'GOVT_PRS_convexhull') from a previous tool call, DO NOT GUESS. You must explicitly ask the user to clarify exactly which layer they mean: "I see multiple layers matching that name. Which one should I use?"
+5. AMBIGUOUS LAYERS: If a tool returns an 'AMBIGUOUS_LAYER' error, you MUST ask the user to clarify by providing clickable markdown buttons. Format the buttons exactly like this:
+`[Layer Name](atquery://send_message?msg=Use layer 'Layer Name')`
+Example response: "I found multiple layers matching your request. Did you mean [GOVT_PRS](atquery://send_message?msg=Use layer 'GOVT_PRS') or [GOVT_PRS_convexhull](atquery://send_message?msg=Use layer 'GOVT_PRS_convexhull')?"
 
 JSON FORMAT:
 {
