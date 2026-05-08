@@ -473,7 +473,7 @@ class AtQueryDockWidget(QtWidgets.QDockWidget):
             return matches[0]
         elif len(matches) > 1:
             matches.sort(key=lambda l: len(l.name()) - len(name))
-            layer_names = list(set([l.name() for l in matches[:5]]))
+            layer_names = list(set([l.name() for l in matches[:15]]))
             raise Exception(f"AMBIGUOUS_LAYER: Multiple layers contain '{name}'. Matching layers: {layer_names}. Ask the user to clarify using the atquery://send_message buttons.")
         
         # 3. Fuzzy Match
@@ -496,7 +496,7 @@ class AtQueryDockWidget(QtWidgets.QDockWidget):
             if len(best_matches) == 1:
                 return best_matches[0]
             else:
-                layer_names = list(set([l.name() for l in best_matches[:5]]))
+                layer_names = list(set([l.name() for l in best_matches[:15]]))
                 raise Exception(f"AMBIGUOUS_LAYER: Multiple fuzzy matches found for '{name}'. Matching layers: {layer_names}. Ask the user to clarify using the atquery://send_message buttons.")
                 
         return None

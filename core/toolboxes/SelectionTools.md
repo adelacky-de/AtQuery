@@ -103,24 +103,34 @@ else:
 ```json
 {
     "name": "clear_selections",
-    "description": "Clears all selected features from a vector layer.",
+    "description": "Clears all selected features from a vector layer. Leave layer_name empty to clear all layers.",
     "parameters": {
         "type": "object",
         "properties": {
-            "layer_name": {"type": "string"}
-        },
-        "required": ["layer_name"]
+            "layer_name": {"type": "string", "description": "Optional. The layer to clear selections from."}
+        }
     }
 }
 ```
 - **Implementation**:
 ```python
-layer = self._resolve_layer(args['layer_name'])
-if layer:
-    layer.removeSelection()
-    layer.triggerRepaint()
+name = args.get('layer_name', '')
+if not name or name.lower() == 'all':
+    count = 0
+    for l in QgsProject.instance().mapLayers().values():
+        if l.type() == QgsMapLayer.VectorLayer:
+            l.removeSelection()
+            l.triggerRepaint()
+            count += 1
     self.iface.mapCanvas().refresh()
-    result = {"status": "success", "message": f"Selections cleared from {layer.name()}"}
+    result = {"status": "success", "message": f"Selections cleared from {count} layers."}
 else:
-    result = {"error": "Layer not found"}
+    layer = self._resolve_layer(name)
+    if layer:
+        layer.removeSelection()
+        layer.triggerRepaint()
+        self.iface.mapCanvas().refresh()
+        result = {"status": "success", "message": f"Selections cleared from {layer.name()}"}
+    else:
+        result = {"error": "Layer not found"}
 ```

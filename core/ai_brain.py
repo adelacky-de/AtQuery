@@ -173,9 +173,12 @@ MANDATORY RULES:
 2. If you see a query matching keywords for a toolbox, LOAD it immediately and call the tool in the same turn.
 3. DO NOT ask "Do you want to proceed?" if the command is specific. Just execute.
 4. If a tool call fails, analyze the error and try a different parameter or tool.
-5. AMBIGUOUS LAYERS: If a tool returns an 'AMBIGUOUS_LAYER' error, you MUST ask the user to clarify by providing clickable HTML buttons. Format the buttons exactly like this:
-`<a href="atquery://send_message?msg=Use layer 'Layer Name'">Layer Name</a>`
-Example response: "I found multiple layers matching your request. Did you mean <a href="atquery://send_message?msg=Use layer 'GOVT_PRS'">GOVT_PRS</a> or <a href="atquery://send_message?msg=Use layer 'GOVT_PRS_convexhull'">GOVT_PRS_convexhull</a>?"
+5. AMBIGUOUS LAYERS: If a tool returns an 'AMBIGUOUS_LAYER' error, you MUST ask the user to clarify by providing clickable HTML buttons as a bulleted list. Format the buttons exactly like this:
+- `<a href="atquery://send_message?msg=Please execute the previous command using the layer: 'Layer Name'">Layer Name</a>`
+Example response: 
+"I found multiple layers matching your request. Which one did you mean?
+- <a href="atquery://send_message?msg=Please execute the previous command using the layer: 'GOVT_PRS'">GOVT_PRS</a>
+- <a href="atquery://send_message?msg=Please execute the previous command using the layer: 'GOVT_PRS_convexhull'">GOVT_PRS_convexhull</a>"
 
 CONTEXT AWARENESS:
 - If the user refers to "this layer", "current layer", or "the active layer", ALWAYS call 'get_active_layer' first to identify it.

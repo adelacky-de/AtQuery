@@ -464,7 +464,7 @@ else:
         "type": "object",
         "properties": {
             "layer_name": {"type": "string"},
-            "expression": {"type": "string", "description": "SQL expression to filter features."}
+            "expression": {"type": "string", "description": "SQL expression to filter features. IMPORTANT: Use double quotes for field names and single quotes for string values (e.g. \"FIELD_NAME\" = 'Value')."}
         },
         "required": ["layer_name", "expression"]
     }
