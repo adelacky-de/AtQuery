@@ -206,12 +206,12 @@ else:
     "parameters": {
         "type": "object",
         "properties": {
-            "input_layer_name": {"type": "string", "description": "Layer to add attributes to."},
-            "join_layer_name": {"type": "string", "description": "Layer to pull attributes from."},
+            "input_layer": {"type": "string", "description": "The target layer to append attributes to."},
+            "join_layer": {"type": "string", "description": "The layer containing the attributes to join."},
             "predicate": {
-                "type": "string",
-                "enum": ["intersect", "contain", "equal", "touch", "overlap", "are within", "cross"],
-                "description": "Spatial relationship."
+                "type": "array",
+                "items": {"type": "integer"},
+                "description": "Spatial predicate (e.g., 0=intersects, 1=contains, 5=touches). IMPORTANT CONSTRAINT: If this returns an error, try a different predicate."
             }
         },
         "required": ["input_layer_name", "join_layer_name"]

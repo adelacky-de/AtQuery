@@ -468,7 +468,19 @@ class AtQueryDockWidget(QtWidgets.QDockWidget):
             
             return json.dumps({"error": f"Tool '{name}' implementation not found."})
         except Exception as e:
-            return json.dumps({"error": str(e)})
+            err_str = str(e)
+            hint = ""
+            if "KeyError" in type(e).__name__:
+                hint = "HINT FOR AI: You forgot a required parameter in your JSON arguments. Check the tool schema."
+            elif "TypeError" in type(e).__name__ or "ValueError" in type(e).__name__:
+                hint = "HINT FOR AI: You passed the wrong data type for a parameter (e.g. text instead of a number)."
+            elif "QgsProcessingException" in type(e).__name__ or "FeatureRequest" in err_str:
+                hint = "HINT FOR AI: QGIS rejected your parameters. Verify the layer supports this algorithm and geometry type."
+            elif "SyntaxError" in type(e).__name__:
+                hint = "HINT FOR AI: The generated SQL expression or code has a syntax error. Check your quotes."
+            
+            error_msg = f"{err_str}. {hint}".strip() if hint else err_str
+            return json.dumps({"error": error_msg})
 
     def _resolve_layer(self, name):
         if not name: return None

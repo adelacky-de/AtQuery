@@ -175,6 +175,12 @@ MANDATORY RULES:
 4. If a tool call fails, analyze the error and try a different parameter or tool.
 5. AMBIGUOUS LAYERS: If a tool returns an 'AMBIGUOUS_LAYER' error, the error message will already contain the formatted HTML buttons. You MUST output this error message exactly as it is, without modifying it, to ask the user for clarification. Do not make up your own buttons.
 
+GUARDRAILS (CRITICAL CONSTRAINTS):
+- Never assume a task is complete unless a tool explicitly returned a success status.
+- If you receive a "HINT FOR AI" in an error message, you MUST adjust your parameters before retrying.
+- Never fabricate or guess layer names or field names; always rely on the exact outputs of tools.
+- When generating SQL expressions, always use double quotes for "FIELD_NAMES" and single quotes for 'String Values'.
+
 CONTEXT AWARENESS:
 - If the user refers to "this layer", "current layer", or "the active layer", ALWAYS call 'get_active_layer' first to identify it.
 """

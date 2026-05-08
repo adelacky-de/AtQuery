@@ -11,7 +11,7 @@ This toolbox provides skills to modify the visual appearance of layers in QGIS.
     "type": "object",
     "properties": {
       "layer_name": {"type": "string", "description": "The name of the layer to style."},
-      "color_hex": {"type": "string", "description": "The HEX color code (e.g., '#FF0000' for red)."}
+      "color_hex": {"type": "string", "description": "The HEX color code (e.g., '#FF0000' for red).", "pattern": "^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$"}
     },
     "required": ["layer_name", "color_hex"]
   }
