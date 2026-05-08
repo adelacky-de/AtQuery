@@ -459,13 +459,17 @@ class AtQueryDockWidget(QtWidgets.QDockWidget):
         if not name: return None
         all_layers = list(QgsProject.instance().mapLayers().values())
         
+        def _build_ambiguity_error(target_name, matching_layers):
+            layer_names = list(set([l.name() for l in matching_layers[:15]]))
+            buttons_html = "<br>".join([f"- <a href=\"atquery://send_message?msg=Please execute the previous command using the layer: '{ln}'\">{ln}</a>" for ln in layer_names])
+            return f"AMBIGUOUS_LAYER: I found multiple layers containing '{target_name}'. Which one did you mean?<br>{buttons_html}"
+        
         # 1. Exact Name Match (Case Insensitive)
         exact_matches = [l for l in all_layers if l.name().lower() == name.lower()]
         if len(exact_matches) == 1:
             return exact_matches[0]
         elif len(exact_matches) > 1:
-            layer_names = list(set([l.name() for l in exact_matches]))
-            raise Exception(f"AMBIGUOUS_LAYER: Multiple exact matches found for '{name}'. Matching layers: {layer_names}. Ask the user to clarify using the atquery://send_message buttons.")
+            raise Exception(_build_ambiguity_error(name, exact_matches))
                 
         # 2. Substring Match (Case Insensitive)
         matches = [l for l in all_layers if name.lower() in l.name().lower()]
@@ -473,8 +477,7 @@ class AtQueryDockWidget(QtWidgets.QDockWidget):
             return matches[0]
         elif len(matches) > 1:
             matches.sort(key=lambda l: len(l.name()) - len(name))
-            layer_names = list(set([l.name() for l in matches[:15]]))
-            raise Exception(f"AMBIGUOUS_LAYER: Multiple layers contain '{name}'. Matching layers: {layer_names}. Ask the user to clarify using the atquery://send_message buttons.")
+            raise Exception(_build_ambiguity_error(name, matches))
         
         # 3. Fuzzy Match
         def normalize(s): return re.sub(r'[^a-z0-9]', '', s.lower())
@@ -496,8 +499,7 @@ class AtQueryDockWidget(QtWidgets.QDockWidget):
             if len(best_matches) == 1:
                 return best_matches[0]
             else:
-                layer_names = list(set([l.name() for l in best_matches[:15]]))
-                raise Exception(f"AMBIGUOUS_LAYER: Multiple fuzzy matches found for '{name}'. Matching layers: {layer_names}. Ask the user to clarify using the atquery://send_message buttons.")
+                raise Exception(_build_ambiguity_error(name, best_matches))
                 
         return None
 

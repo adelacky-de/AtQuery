@@ -118,7 +118,7 @@ name = args.get('layer_name', '')
 if not name or name.lower() == 'all':
     count = 0
     for l in QgsProject.instance().mapLayers().values():
-        if l.type() == QgsMapLayer.VectorLayer:
+        if isinstance(l, QgsVectorLayer):
             l.removeSelection()
             l.triggerRepaint()
             count += 1
