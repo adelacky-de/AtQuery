@@ -114,6 +114,7 @@ else:
 ```
 - **Implementation**:
 ```python
+from qgis.core import QgsVectorLayer
 name = args.get('layer_name', '')
 if not name or name.lower() == 'all':
     count = 0

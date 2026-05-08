@@ -55,9 +55,11 @@ else:
     }
     driver_name, ext = driver_map.get(fmt, ('GeoJSON', '.geojson'))
     
-    # Force extension if not database
-    if ext and not file_name.lower().endswith(ext):
-        file_name += ext
+    # Force extension if not database, and FORCE file_name to be the exact full layer name
+    if ext:
+        file_name = f"{layer.name()}{ext}"
+        if proj_path:
+            file_name = os.path.join(proj_path, file_name)
     
     options = QgsVectorFileWriter.SaveVectorOptions()
     options.driverName = driver_name

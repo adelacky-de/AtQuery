@@ -255,7 +255,7 @@ class AtQueryDockWidget(QtWidgets.QDockWidget):
         
         if aborted:
             title = "⚠️ AtQuery aborted the task"
-            subtitle = f"<i>\"{query}\"</i><br><br>A tool failed repeatedly. This usually happens if you are missing required data (like an elevation raster) or if the tool parameters are invalid."
+            subtitle = f"<i>\"{query}\"</i><br><br>A tool failed repeatedly. Check if the layer names or parameters are valid."
         else:
             title = "⚠️ AtQuery couldn't find a built-in skill for:"
             subtitle = f"<i>\"{query}\"</i>"
@@ -326,7 +326,7 @@ class AtQueryDockWidget(QtWidgets.QDockWidget):
                     
                     # If the forced tool also failed, warn the user
                     if any("error" in out.get("content", "").lower() for out in tool_outputs):
-                        content += "<br><br>⚠️ <b>Warning:</b> The forced tool encountered an error. You may be missing required data (e.g. an elevation raster)."
+                        content += "<br><br>⚠️ <b>Warning:</b> The forced tool encountered an error. Check if the layer names or parameters are valid."
                 else:
                     content = ai_msg.get("content", "I executed the closest available skill.")
                 self.handle_ai_response(content)
