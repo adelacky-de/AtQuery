@@ -404,6 +404,7 @@ class AtQueryDockWidget(QtWidgets.QDockWidget):
                 start, end = content.find('{'), content.rfind('}') + 1
                 data = json.loads(content[start:end])
                 if 'content' in data: msg['content'] = data['content']
+                if 'suggested_queries' in data: msg['suggested_queries'] = data['suggested_queries']
                 if 'tool_calls' in data:
                     normalized = []
                     for c in data['tool_calls']:
