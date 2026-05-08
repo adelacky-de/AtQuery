@@ -460,8 +460,9 @@ class AtQueryDockWidget(QtWidgets.QDockWidget):
         all_layers = list(QgsProject.instance().mapLayers().values())
         
         def _build_ambiguity_error(target_name, matching_layers):
+            import urllib.parse
             layer_names = list(set([l.name() for l in matching_layers[:15]]))
-            buttons_html = "<br>".join([f"- <a href=\"atquery://send_message?msg=Please execute the previous command using the layer: '{ln}'\">{ln}</a>" for ln in layer_names])
+            buttons_html = "<br>".join([f"- <a href=\"atquery://send_message?msg={urllib.parse.quote('Please execute the previous command using the layer: ' + chr(39) + ln + chr(39))}\">{ln}</a>" for ln in layer_names])
             return f"AMBIGUOUS_LAYER: I found multiple layers containing '{target_name}'. Which one did you mean?<br>{buttons_html}"
         
         # 1. Exact Name Match (Case Insensitive)
