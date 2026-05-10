@@ -66,7 +66,7 @@ else:
         "type": "object",
         "properties": {
             "layer_name": {"type": "string", "description": "Exact layer name."},
-            "limit": {"type": "integer", "description": "Number of features to return (default 10)."}
+            "limit": {"type": "integer", "description": "Number of features to return (default 5, max 50)."}
         },
         "required": ["layer_name"]
     }
@@ -77,7 +77,8 @@ else:
 layer = self._resolve_layer(args['layer_name'])
 if layer:
     if hasattr(layer, 'getFeatures'):
-        limit = args.get('limit', 5)
+        # Clamp limit between 1 and 50 to prevent crashing local LLMs
+        limit = min(max(args.get('limit', 5), 1), 50)
         fields = [f.name() for f in layer.fields()]
         
         # Build HTML table for premium look and to prevent AI hallucination
