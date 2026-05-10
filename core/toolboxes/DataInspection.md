@@ -22,7 +22,10 @@ Detailed metadata about layers, their fields, attributes, and Coordinate Referen
 ```python
 layer = self._resolve_layer(args['layer_name'])
 if layer:
-    result = {"fields": [f.name() for f in layer.fields()]}
+    if hasattr(layer, 'fields'):
+        result = {"fields": [f.name() for f in layer.fields()]}
+    else:
+        result = {"error": f"Layer '{layer.name()}' is not a vector layer and has no attribute fields."}
 else:
     result = {"error": "Layer not found"}
 ```
@@ -48,6 +51,46 @@ else:
 layer = self._resolve_layer(args['layer_name'])
 if layer:
     result = {"crs": layer.crs().authid(), "description": layer.crs().description()}
+else:
+    result = {"error": "Layer not found"}
+```
+
+### Tool: get_layer_features_sample
+- **Description**: Returns a sample of features (rows) from the layer's attribute table.
+- **Schema**:
+```json
+{
+    "name": "get_layer_features_sample",
+    "description": "Returns a sample of attribute values (first 10 rows) for the specified layer.",
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "layer_name": {"type": "string", "description": "Exact layer name."},
+            "limit": {"type": "integer", "description": "Number of features to return (default 10)."}
+        },
+        "required": ["layer_name"]
+    }
+}
+```
+- **Implementation**:
+```python
+layer = self._resolve_layer(args['layer_name'])
+if layer:
+    if hasattr(layer, 'getFeatures'):
+        limit = args.get('limit', 10)
+        fields = [f.name() for f in layer.fields()]
+        data = []
+        for feat in layer.getFeatures():
+            if len(data) >= limit: break
+            row = {}
+            for i, f in enumerate(fields):
+                val = feat.attributes()[i]
+                if hasattr(val, 'toString'): val = val.toString()
+                row[f] = str(val)
+            data.append(row)
+        result = {"features": data, "count": len(data)}
+    else:
+        result = {"error": f"Layer '{layer.name()}' has no attribute table (it may be a raster layer)."}
 else:
     result = {"error": "Layer not found"}
 ```
