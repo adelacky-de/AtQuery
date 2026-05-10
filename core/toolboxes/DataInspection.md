@@ -66,7 +66,9 @@ else:
         "type": "object",
         "properties": {
             "layer_name": {"type": "string", "description": "Exact layer name."},
-            "limit": {"type": "integer", "description": "Number of features to return (default 5, max 50)."}
+            "limit": {"type": "integer", "description": "Number of features to return (default 5, max 50)."},
+            "sort_by": {"type": "string", "description": "Field name to sort by."},
+            "ascending": {"type": "boolean", "description": "Sort order (default true)."}
         },
         "required": ["layer_name"]
     }
@@ -74,6 +76,7 @@ else:
 ```
 - **Implementation**:
 ```python
+from qgis.core import QgsFeatureRequest
 layer = self._resolve_layer(args['layer_name'])
 if layer:
     if hasattr(layer, 'getFeatures'):
@@ -81,12 +84,17 @@ if layer:
         limit = min(max(args.get('limit', 5), 1), 50)
         fields = [f.name() for f in layer.fields()]
         
+        req = QgsFeatureRequest()
+        sort_field = args.get('sort_by')
+        if sort_field:
+            req.setOrderBy(QgsFeatureRequest.OrderBy([QgsFeatureRequest.OrderByClause(sort_field, args.get('ascending', True))]))
+        
         # Build HTML table for premium look and to prevent AI hallucination
         html = '<table border="1" style="border-collapse: collapse; width: 100%; font-size: 11px;">'
         html += '<tr style="background-color: #f2f2f2;">' + "".join([f'<th style="padding: 4px;">{f}</th>' for f in fields]) + '</tr>'
         
         count = 0
-        for feat in layer.getFeatures():
+        for feat in layer.getFeatures(req):
             if count >= limit: break
             html += '<tr>' + "".join([f'<td style="padding: 4px;">{str(feat.attributes()[i])}</td>' for i in range(len(fields))]) + '</tr>'
             count += 1
