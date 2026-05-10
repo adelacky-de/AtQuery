@@ -253,6 +253,11 @@ class AtQueryDockWidget(QtWidgets.QDockWidget):
             self.user_input.setText(msg)
             self._send_query()
             return
+        elif action.startswith('http'):
+            from PyQt5.QtCore import QUrl
+            from PyQt5.QtGui import QDesktopServices
+            QDesktopServices.openUrl(QUrl(action))
+            return
             
         query = getattr(self, 'last_user_query', None)
         if not query:
