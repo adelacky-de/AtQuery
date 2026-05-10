@@ -79,16 +79,22 @@ if layer:
     if hasattr(layer, 'getFeatures'):
         limit = args.get('limit', 10)
         fields = [f.name() for f in layer.fields()]
-        data = []
+        
+        # Build HTML table for premium look and to prevent AI hallucination
+        html = '<table border="1" style="border-collapse: collapse; width: 100%; font-size: 11px;">'
+        html += '<tr style="background-color: #f2f2f2;">' + "".join([f'<th style="padding: 4px;">{f}</th>' for f in fields]) + '</tr>'
+        
+        count = 0
         for feat in layer.getFeatures():
-            if len(data) >= limit: break
-            row = {}
-            for i, f in enumerate(fields):
-                val = feat.attributes()[i]
-                if hasattr(val, 'toString'): val = val.toString()
-                row[f] = str(val)
-            data.append(row)
-        result = {"features": data, "count": len(data)}
+            if count >= limit: break
+            html += '<tr>' + "".join([f'<td style="padding: 4px;">{str(feat.attributes()[i])}</td>' for i in range(len(fields))]) + '</tr>'
+            count += 1
+        html += '</table>'
+        
+        if count == 0:
+            result = {"error": "The layer is empty (0 features)."}
+        else:
+            result = {"status": "success", "html_table": html}
     else:
         result = {"error": f"Layer '{layer.name()}' has no attribute table (it may be a raster layer)."}
 else:

@@ -179,7 +179,11 @@ GUARDRAILS (CRITICAL CONSTRAINTS):
 - Never assume a task is complete unless a tool explicitly returned a success status.
 - If you receive a "HINT FOR AI" in an error message, you MUST adjust your parameters before retrying.
 - Never fabricate or guess layer names or field names; always rely on the exact outputs of tools.
-- When generating SQL expressions, always use double quotes for "FIELD_NAMES" and single quotes for 'String Values'.
+- If a tool returns a result containing "html_table", you MUST output that HTML code exactly as provided. Do not summarize, re-format, or convert it to Markdown.
+- When generating SQL expressions:
+    - Map symbols like '&' to 'AND', '|' to 'OR', and ensure strings are in single quotes.
+    - Always use double quotes for "FIELD_NAMES" and single quotes for 'String Values'.
+    - If a user mentions a value like "Central & Western", check if the actual field value is "Central and Western" by sampling the data first if unsure.
 
 CONTEXT AWARENESS:
 - If the user explicitly says "this layer", "current layer", or "the active layer" without providing a specific name, you must call 'get_active_layer' first. If the user provides a layer name (even if misspelled), DO NOT call 'get_active_layer', just trust the name they provided.
