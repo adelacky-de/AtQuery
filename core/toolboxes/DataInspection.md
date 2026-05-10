@@ -68,7 +68,8 @@ else:
             "layer_name": {"type": "string", "description": "Exact layer name."},
             "limit": {"type": "integer", "description": "Number of features to return (default 5, max 50)."},
             "sort_by": {"type": "string", "description": "Field name to sort by."},
-            "ascending": {"type": "boolean", "description": "Sort order (default true)."}
+            "ascending": {"type": "boolean", "description": "Sort order (default true)."},
+            "filter": {"type": "string", "description": "Optional QGIS expression to filter features (e.g., \"NAME_EN\" = 'Southern District')."}
         },
         "required": ["layer_name"]
     }
@@ -88,6 +89,10 @@ if layer:
         sort_field = args.get('sort_by')
         if sort_field:
             req.setOrderBy(QgsFeatureRequest.OrderBy([QgsFeatureRequest.OrderByClause(sort_field, args.get('ascending', True))]))
+        
+        filter_exp = args.get('filter')
+        if filter_exp:
+            req.setFilterExpression(filter_exp)
         
         # Build HTML table for premium look and to prevent AI hallucination
         html = '<table border="1" style="border-collapse: collapse; width: 100%; font-size: 11px;">'
