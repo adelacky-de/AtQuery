@@ -182,7 +182,7 @@ GUARDRAILS (CRITICAL CONSTRAINTS):
 - When generating SQL expressions, always use double quotes for "FIELD_NAMES" and single quotes for 'String Values'.
 
 CONTEXT AWARENESS:
-- If the user refers to "this layer", "current layer", or "the active layer", ALWAYS call 'get_active_layer' first to identify it.
+- If the user explicitly says "this layer", "current layer", or "the active layer" without providing a specific name, you must call 'get_active_layer' first. If the user provides a layer name (even if misspelled), DO NOT call 'get_active_layer', just trust the name they provided.
 """
 
 FORCED_EXECUTION_SYSTEM_PROMPT = """
