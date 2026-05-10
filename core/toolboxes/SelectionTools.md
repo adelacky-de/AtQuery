@@ -135,3 +135,50 @@ else:
     else:
         result = {"error": "Layer not found"}
 ```
+
+### Tool: select_features_advanced
+- **Description**: Selects features in a layer with support for filtering, sorting, and limits (e.g. "select the top 5 largest areas").
+- **Schema**:
+```json
+{
+    "name": "select_features_advanced",
+    "description": "Selects features in a vector layer with advanced options like sorting and limits.",
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "layer_name": {"type": "string", "description": "Layer name."},
+            "filter": {"type": "string", "description": "Optional SQL expression to filter features."},
+            "sort_by": {"type": "string", "description": "Optional field name to sort by."},
+            "ascending": {"type": "boolean", "description": "Sort order (default true)."},
+            "limit": {"type": "integer", "description": "Optional limit on number of features to select."}
+        },
+        "required": ["layer_name"]
+    }
+}
+```
+- **Implementation**:
+```python
+from qgis.core import QgsFeatureRequest
+layer = self._resolve_layer(args['layer_name'])
+if layer:
+    req = QgsFeatureRequest()
+    if args.get('filter'):
+        req.setFilterExpression(args['filter'])
+    if args.get('sort_by'):
+        req.setOrderBy(QgsFeatureRequest.OrderBy([QgsFeatureRequest.OrderByClause(args['sort_by'], args.get('ascending', True))]))
+    
+    ids = []
+    limit = args.get('limit')
+    for feat in layer.getFeatures(req):
+        if limit and len(ids) >= limit: break
+        ids.append(feat.id())
+    
+    layer.select(ids)
+    count = len(ids)
+    layer.triggerRepaint()
+    if count > 0: self.iface.mapCanvas().zoomToSelected(layer)
+    self.iface.mapCanvas().refresh()
+    result = {"status": "success", "selected_count": count}
+else:
+    result = {"error": "Layer not found"}
+```
