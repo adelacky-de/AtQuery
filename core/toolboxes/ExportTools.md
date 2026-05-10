@@ -67,7 +67,7 @@ else:
     err, err_msg = QgsVectorFileWriter.writeAsVectorFormatV2(layer, file_name, self.iface.mapCanvas().mapSettings().transformContext(), options)
     
     if err == QgsVectorFileWriter.NoError:
-        result = {"status": "success", "saved_to": file_name, "driver": driver_name}
+        result = {"status": "success", "saved_to": file_name, "driver": driver_name, "exported_layer": layer.name()}
     else:
         result = {"error": f"Export failed: {err_msg}"}
 ```
