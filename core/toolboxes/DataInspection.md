@@ -108,7 +108,7 @@ if layer:
         if count == 0:
             result = {"error": "The layer is empty (0 features)."}
         else:
-            result = {"status": "success", "html_table": html}
+            result = {"status": "success", "PRESERVE_AS_HTML": html}
     else:
         result = {"error": f"Layer '{layer.name()}' has no attribute table (it may be a raster layer)."}
 else:
