@@ -77,7 +77,7 @@ else:
 layer = self._resolve_layer(args['layer_name'])
 if layer:
     if hasattr(layer, 'getFeatures'):
-        limit = args.get('limit', 10)
+        limit = args.get('limit', 5)
         fields = [f.name() for f in layer.fields()]
         
         # Build HTML table for premium look and to prevent AI hallucination

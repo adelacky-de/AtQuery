@@ -413,7 +413,7 @@ class AtQueryDockWidget(QtWidgets.QDockWidget):
             "options": {"temperature": 0.0, "num_predict": 400}
         }
         
-        resp = requests.post(self.ollama_url, json=payload, timeout=60)
+        resp = requests.post(self.ollama_url, json=payload, timeout=120)
         resp.raise_for_status()
         msg = resp.json().get('message', {})
         
