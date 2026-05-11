@@ -180,18 +180,26 @@ def get_base_tools():
     })
     return base_tools
 
-BASE_SYSTEM_PROMPT = """
-You are "AtQuery", a QGIS AI Agent created by Adela C. 
-You operate using a Dynamic Skill Library.
+def get_meta_skills():
+    """Reads all markdown files in the skills directory to build the AI's harness."""
+    meta_skills = ""
+    skills_dir = os.path.join(os.path.dirname(__file__), 'skills')
+    if os.path.exists(skills_dir):
+        for f in sorted(os.listdir(skills_dir)):
+            if f.endswith('.md'):
+                with open(os.path.join(skills_dir, f), 'r') as file:
+                    meta_skills += f"\n---\n{file.read()}\n"
+    return meta_skills
 
-MANDATORY RULES:
-1. If you need to perform a GIS action, ALWAYS use the provided tools.
-2. If you see a query matching keywords for a toolbox, LOAD it immediately and call the tool in the same turn.
-3. DO NOT ask "Do you want to proceed?" if the command is specific. Just execute.
-4. If a tool call fails, analyze the error and try a different parameter or tool.
-5. AMBIGUOUS LAYERS: If a tool returns an 'AMBIGUOUS_LAYER' error, the error message will already contain the formatted HTML buttons. You MUST output this error message exactly as it is, without modifying it, to ask the user for clarification. Do not make up your own buttons.
+def get_system_prompt():
+    meta = get_meta_skills()
+    return f"""You are "AtQuery", a QGIS AI Agent created by Adela C. 
+You operate using a Dynamic Skill Library and follow a strict "Agent Skills" engineering harness.
 
-GUARDRAILS (CRITICAL CONSTRAINTS):
+## CORE HARNESS SKILLS
+{meta}
+
+## OPERATIONAL RULES
 - Never assume a task is complete unless a tool explicitly returned a success status.
 - If you receive a "HINT FOR AI" in an error message, you MUST adjust your parameters before retrying.
 - Never fabricate or guess layer names or field names; always rely on the exact outputs of tools.
