@@ -55,17 +55,32 @@ def _load_catalog_from_md():
         catalog[name.strip()] = {"keywords": [k.strip() for k in keywords.split(',')], "description": desc.strip()}
     return catalog
 
-def identify_toolboxes(query):
-    """Returns list of matching built-in toolbox names."""
-    catalog = _load_catalog_from_md()
+def identify_toolboxes(query: str) -> list:
+    """
+    Keyword-matches the query against toolbox names.
+    Returns list of toolbox names to load.
+    """
     query_clean = query.lower()
-    matches = []
-    for name, info in catalog.items():
-        for kw in info['keywords']:
+    
+    # ── HARD RULE: PREVENT ACTIVE LAYER DISTRACTION ──
+    # If the user provides a specific layer name, we skip ProjectDiscovery (which triggers get_active_layer)
+    # to prevent the AI from getting confused by the 'currently active' layer.
+    all_layers = [l.name().lower() for l in QgsProject.instance().mapLayers().values()]
+    has_specific_layer = any(l in query_clean for l in all_layers if len(l) > 2)
+    
+    matched = []
+    catalog = _load_catalog_from_md()
+    for tb in catalog:
+        # Skip ProjectDiscovery if we have a specific layer name target
+        if tb == "ProjectDiscovery" and has_specific_layer:
+            continue
+            
+        keywords = catalog[tb].get('keywords', [])
+        for kw in keywords:
             if re.search(rf'\b{re.escape(kw.lower())}\b', query_clean):
-                matches.append(name)
+                matched.append(tb)
                 break
-    return list(set(matches))
+    return matched
 
 
 def get_available_toolboxes_summary() -> str:

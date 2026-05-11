@@ -223,6 +223,14 @@ class AtQueryDockWidget(QtWidgets.QDockWidget):
                             return
                         except: pass
                         
+                    if "PRESERVE_AS_HTML" in output:
+                        try:
+                            html_data = json.loads(output).get("PRESERVE_AS_HTML")
+                            self.chat_display.append(html_data)
+                            # Update output to prevent AI from summarizing or repeating the data
+                            output = json.dumps({"status": "success", "message": "CRITICAL: The HTML table has been displayed to the user. DO NOT repeat the data. DO NOT summarize the content. Just provide a one-sentence introduction like 'Here is the data from the layer:'."})
+                        except: pass
+
                     tool_outputs.append({"role": "tool", "content": output, "tool_call_id": tc.get("id")})
                 
                 current_turn_history.extend(tool_outputs)
