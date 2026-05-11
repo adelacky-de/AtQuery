@@ -1,6 +1,7 @@
 import os
 import json
 import re
+from qgis.core import QgsProject
 
 # --- Global Skill Registry (Caches implementation code) ---
 SKILL_IMPLEMENTATIONS = {}
