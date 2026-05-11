@@ -180,9 +180,24 @@ def get_base_tools():
     })
     return base_tools
 
+# --- Base Harness (Hardcoded to ensure functionality if skills/ directory is missing) ---
+BASE_HARNESS = """
+# Skill: CoreHarness
+This core protocol ensures the agent remains disciplined and follows a strict GIS engineering workflow.
+
+## Process
+1. **Plan**: Break complex requests into atomic sub-tasks.
+2. **Implement**: Execute tool calls with precise parameters and unit checks.
+3. **Verify**: Always confirm success through feature counts or map zooming.
+
+## Anti-Rationalizations
+- **No Hallucinations**: Never make up data. Use tools for all discovery.
+- **No Generic Defaults**: Always resolve specific layer names provided by the user.
+"""
+
 def get_meta_skills():
     """Reads all markdown files in the skills directory to build the AI's harness."""
-    meta_skills = ""
+    meta_skills = BASE_HARNESS
     skills_dir = os.path.join(os.path.dirname(__file__), 'skills')
     if os.path.exists(skills_dir):
         for f in sorted(os.listdir(skills_dir)):
