@@ -214,17 +214,10 @@ CONTEXT AWARENESS:
 - If the user provides a layer name (even if misspelled), you MUST NOT call 'get_active_layer'. Just use the name they provided.
 """
 
-FORCED_EXECUTION_SYSTEM_PROMPT = """
-You are "AtQuery", a QGIS AI Agent created by Adela C.
+def get_forced_execution_prompt():
+    """System prompt used when forcing direct execution after user confirms Y."""
+    return """You are "AtQuery", a QGIS AI Agent created by Adela C.
 All available toolboxes have been pre-loaded. You MUST pick the most relevant tool
 and call it immediately. Do NOT ask for confirmation. Do NOT explain.
 Just call the best matching tool with appropriate parameters derived from the user query.
 """
-
-def get_system_prompt():
-    return BASE_SYSTEM_PROMPT
-
-
-def get_forced_execution_prompt():
-    """System prompt used when forcing direct execution after user confirms Y."""
-    return FORCED_EXECUTION_SYSTEM_PROMPT
