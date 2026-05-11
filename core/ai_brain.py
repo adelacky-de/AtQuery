@@ -180,19 +180,21 @@ def get_base_tools():
     })
     return base_tools
 
-# --- Base Harness (Hardcoded to ensure functionality if skills/ directory is missing) ---
+# --- Base Harness (Hardcoded to ensure functionality even if skills/ directory is missing) ---
 BASE_HARNESS = """
 # Skill: CoreHarness
 This core protocol ensures the agent remains disciplined and follows a strict GIS engineering workflow.
 
 ## Process
 1. **Plan**: Break complex requests into atomic sub-tasks.
-2. **Implement**: Execute tool calls with precise parameters and unit checks.
-3. **Verify**: Always confirm success through feature counts or map zooming.
+2. **Implement**: Execute tool calls with precise parameters.
+3. **Loop Prevention**: If you have already called a tool in this turn, **STOP**. Do not repeat successful actions.
+4. **Verify**: Always confirm success through feature counts or map zooming.
 
 ## Anti-Rationalizations
 - **No Hallucinations**: Never make up data. Use tools for all discovery.
-- **No Generic Defaults**: Always resolve specific layer names provided by the user.
+- **No Redundant Calls**: If a tool returns "success" or "PRESERVE_AS_HTML", assume the action is finished. Do not call it again.
+- **No Infinite Loops**: If a tool fails twice with the same parameters, ABORT and ask for help.
 """
 
 def get_meta_skills():
