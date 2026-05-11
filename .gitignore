@@ -5,8 +5,8 @@
 .env.*
 *.env
 
-# AI Agent Skills (Harness)
-core/skills/
+# AI Agent Development Workflow (Private)
+AI_agent/
 *.pyd
 .Python
 
