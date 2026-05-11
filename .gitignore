@@ -5,6 +5,11 @@
 .env.*
 *.env
 
+# AI Agent Skills (Harness)
+core/skills/
+*.pyd
+.Python
+
 # Python cache
 __pycache__/
 *.py[cod]
