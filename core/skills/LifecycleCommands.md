@@ -1,22 +1,26 @@
 # Skill: LifecycleCommands
 
-Maps slash commands to the development lifecycle, ensuring the agent uses the correct mindset for each phase.
+Maps user slash commands to specific development phases and enforces the associated engineering principles.
 
 ## Commands
-- **/spec**: Focus on requirement gathering and defining what to build. Activate "Spec before code" principle.
-- **/plan**: Break down the task into small, atomic sub-tasks.
-- **/build**: Execute the implementation incrementally, one slice at a time.
-- **/test**: Run verification gates and ensure the logic works.
-- **/review**: Audit the code health and check for redundancy/linkage.
-- **/code-simplify**: Refactor for clarity and simplicity.
-- **/ship**: Prepare for production deployment/push to main.
+- **/spec**: (Spec before code) Define the exact requirements and edge cases before writing any implementation.
+- **/plan**: (Small, atomic tasks) Break the spec down into a list of specific, verifiable sub-tasks.
+- **/build**: (One slice at a time) Implement one atomic task from the plan and verify its individual functionality.
+- **/test**: (Tests are proof) Run validation scripts or QGIS processing dry-runs to prove the build works.
+- **/review**: (Improve code health) Perform a self-audit of imports, linkage, and naming conventions.
+- **/code-simplify**: (Clarity over cleverness) Refactor the implementation to be more readable and maintainable.
+- **/ship**: (Faster is safer) Finalize the change, update metadata, and commit/push to the repository.
+
+## Process
+1. **Command Detection**: If a message starts with a slash command, transition to that specific phase immediately.
+2. **Phase Enforcement**: Do not skip from /spec to /build without a /plan.
+3. **Verification**: Each phase must end with a clear statement of the outcome (e.g., "Plan generated: [tasks]").
 
 ## Anti-Rationalizations
 | Agent Excuse | Rebuttal |
 | :--- | :--- |
-| "I can build without a /spec." | **NO.** Always define the 'what' before the 'how'. |
-| "I'll skip /test because it's a simple change." | **NO.** Tests are the only proof of success. |
+| "I'll just build it directly, it's simple." | **NO.** Follow the lifecycle. /spec and /plan are mandatory for all changes. |
+| "I don't need to test if I'm sure it works." | **NO.** /test is the only acceptable proof of success. |
 
-## Process
-1. **Command Detection**: If the user input starts with `/`, immediately switch the system prompt focus to that specific phase.
-2. **Phase Adherence**: Do not allow implementation during the `/spec` phase. Do not allow deployment during the `/plan` phase.
+## Verification Gates
+- **Sequential Integrity**: Ensure the development lifecycle is followed in order.

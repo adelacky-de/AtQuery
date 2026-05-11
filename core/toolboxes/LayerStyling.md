@@ -1,36 +1,65 @@
-# LayerStyling Toolbox
+# Skill: LayerStyling
 
-This toolbox provides skills to modify the visual appearance of layers in QGIS.
+Guides the agent through modifying the visual appearance of layers (Color, Transparency) and canvas navigation (Zooming).
+
+## When to Use
+- When the user wants to change the "look", "color", or "transparency" of a layer.
+- When the user needs to "zoom to" or "center on" a specific layer or coordinate.
+
+## Process
+1. **Target Identification**: Resolve the layer name.
+2. **Property Mutation**: Modify the renderer (for color/transparency) or map settings (for zoom).
+3. **UI Synchronization**: Refresh the layer tree and map canvas to reflect changes.
+4. **Verification**: Confirm that the change was applied successfully.
+
+## Anti-Rationalizations
+| Agent Excuse | Rebuttal |
+| :--- | :--- |
+| "I'll change the color but skip the refresh." | **NO.** If you don't refresh the symbology, the user won't see the change in the legend. |
+| "I'll guess the coordinate if not provided." | **NO.** Use `zoom_to_layer` if coordinates are ambiguous. |
+
+## Verification Gates
+- **Visual Update**: Every style change must conclude with `refreshLayerSymbology` and `triggerRepaint`.
+
+---
 
 ### Tool: set_layer_color
+- **Description**: Sets the fill or line color of a vector layer using a HEX color code.
+- **Schema**:
 ```json
 {
   "name": "set_layer_color",
-  "description": "Sets the fill or line color of a vector layer using a HEX color code. DO NOT use this tool if the user is asking to change transparency or opacity; use set_layer_transparency instead.",
+  "description": "Sets the fill or line color of a vector layer using a HEX color code.",
   "parameters": {
     "type": "object",
     "properties": {
       "layer_name": {"type": "string", "description": "The name of the layer to style."},
-      "color_hex": {"type": "string", "description": "The HEX color code (e.g., '#FF0000' for red).", "pattern": "^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$"}
+      "color_hex": {"type": "string", "description": "The HEX color code (e.g., '#FF0000')."}
     },
     "required": ["layer_name", "color_hex"]
   }
 }
 ```
-
+- **Implementation**:
 ```python
 from qgis.PyQt.QtGui import QColor
-
 layer = self._resolve_layer(args['layer_name'])
 if not layer:
     result = {"error": f"Layer '{args['layer_name']}' not found."}
 else:
-    renderer = layer.renderer()
-    symbol = renderer.symbol()
-    symbol.setColor(QColor(args['color_hex']))
-    layer.triggerRepaint()
-    iface.layerTreeView().refreshLayerSymbology(layer.id())
-    result = {"status": "success", "message": f"Color of '{layer.name()}' set to {args['color_hex']}"}
+    try:
+        renderer = layer.renderer()
+        if renderer:
+            symbol = renderer.symbol()
+            symbol.setColor(QColor(args['color_hex']))
+            layer.triggerRepaint()
+            if hasattr(self.iface, 'layerTreeView'):
+                self.iface.layerTreeView().refreshLayerSymbology(layer.id())
+            result = {"status": "success", "color": args['color_hex']}
+        else:
+            result = {"error": "Layer has no renderer (may be a raster)."}
+    except Exception as e:
+        result = {"error": f"Styling failed: {str(e)}"}
 ```
 
 ### Tool: set_layer_transparency

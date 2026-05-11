@@ -1,6 +1,30 @@
-# Toolbox: SelectionTools
+# Skill: SelectionTools
 
-Tools for spatial and attribute-based selection.
+Guides the agent through spatial and attribute-based feature selection (SQL expressions, spatial predicates, advanced ranking).
+
+## When to Use
+- When the user wants to "find", "highlight", or "select" specific features.
+- When performing spatial queries like "points inside this polygon."
+- When ranking data (e.g., "select the 5 largest areas").
+
+## Process
+1. **Target Identification**: Resolve the target and (if applicable) the intersect layer.
+2. **Logic Construction**: Build the SQL expression or spatial predicate.
+3. **Execution**: Apply the selection to the layer.
+4. **Interaction**: Zoom the map canvas to the selected features for immediate visual feedback.
+5. **Verification**: Confirm the count of selected features.
+
+## Anti-Rationalizations
+| Agent Excuse | Rebuttal |
+| :--- | :--- |
+| "I'll select all features since I'm not sure about the filter." | **NO.** Always ask for clarification or use a conservative filter. |
+| "I don't need to zoom; they can see it in the table." | **NO.** GIS is visual. Always provide map feedback for selections. |
+
+## Verification Gates
+- **Selection Count**: If 0 features are selected, inform the user and suggest checking field names/values.
+- **Canvas Update**: Ensure `triggerRepaint()` and `refresh()` are called.
+
+---
 
 ### Tool: QgsVectorLayer_selectByExpression
 - **Description**: Selects features in a layer using a SQL-like expression.
@@ -23,12 +47,21 @@ Tools for spatial and attribute-based selection.
 ```python
 layer = self._resolve_layer(args['layer_name'])
 if layer:
-    layer.selectByExpression(args['sql'])
-    count = layer.selectedFeatureCount()
-    layer.triggerRepaint()
-    if count > 0: self.iface.mapCanvas().zoomToSelected(layer)
-    self.iface.mapCanvas().refresh()
-    result = {"status": "success", "count": count}
+    try:
+        layer.selectByExpression(args['sql'])
+        count = layer.selectedFeatureCount()
+        layer.triggerRepaint()
+        if count > 0: 
+            self.iface.mapCanvas().zoomToSelected(layer)
+        self.iface.mapCanvas().refresh()
+        
+        # Verification Gate
+        if count == 0:
+            result = {"warning": "Expression was valid but matched 0 features.", "sql_used": args['sql']}
+        else:
+            result = {"status": "success", "count": count}
+    except Exception as e:
+        result = {"error": f"SQL Error: {str(e)}"}
 else:
     result = {"error": "Layer not found"}
 ```

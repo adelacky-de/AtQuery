@@ -415,7 +415,7 @@ class AtQueryDockWidget(QtWidgets.QDockWidget):
 
         payload = {
             "model": self.model_name,
-            "messages": [{"role": "system", "content": get_system_prompt(getattr(self, 'last_user_query', ''))}] + sanitized,
+            "messages": [{"role": "system", "content": get_system_prompt()}] + sanitized,
             "tools": tools,
             "stream": False,
             "options": {"temperature": 0.0, "num_predict": 400}
