@@ -1,6 +1,30 @@
-# Toolbox: VectorProcessing
+# Skill: VectorProcessing
 
-Core vector geoprocessing algorithms.
+Guides the agent through core vector geoprocessing algorithms (Buffer, Clip, Dissolve, Centroids, etc.) using native QGIS processing engines.
+
+## When to Use
+- When the user requests spatial modifications to existing vector layers.
+- When creating proximity zones or "envelopes" around features (e.g., "within 500m").
+- When performing geometric derivations (e.g., centroids, bounding boxes).
+
+## Process
+1. **Name Resolution**: Identify target layers using the resolve_layer logic.
+2. **Unit Check**: Verify if the layer uses Degrees vs. Meters. If in degrees, convert user distances appropriately.
+3. **Execution**: Call the native QGIS algorithm via the `processing` engine.
+4. **Verification**: Check if the output layer was added to the project and contains features.
+
+## Anti-Rationalizations
+| Agent Excuse | Rebuttal |
+| :--- | :--- |
+| "I'll just guess the distance units." | **NO.** Check `layer.crs().mapUnits()` before calculating the distance. |
+| "The buffer failed, I'll just tell the user I'm done." | **NO.** If an algorithm fails, you must report the specific Python error so it can be debugged. |
+| "I can skip confirming the output count." | **NO.** Always verify if the processing result is an empty layer to prevent "silent failures." |
+
+## Verification Gates
+- **Project Presence**: The new layer must be visible in `QgsProject.instance().mapLayers()`.
+- **Geometry Integrity**: Verify that the new layer's geometry type matches the expected result (e.g., Buffer always results in Polygons).
+
+---
 
 ### Tool: processing_run_native_buffer
 - **Description**: Creates a buffer around features in a vector layer.
@@ -22,29 +46,38 @@ Core vector geoprocessing algorithms.
 - **Implementation**:
 ```python
 import processing
-from qgis.core import QgsUnitTypes
+from qgis.core import QgsUnitTypes, QgsProject
 layer = self._resolve_layer(args['layer_name'])
 if layer:
     dist = args['distance']
-    # Check if the layer uses degrees — convert meters to degrees
+    # Check if the layer uses degrees — convert meters to degrees if needed
     if layer.crs().mapUnits() == QgsUnitTypes.DistanceDegrees:
         dist = dist / 111319.9
     
     out_name = f"{layer.name()}_{int(args['distance'])}m_buffer"
-    res = processing.run("native:buffer", {
-        'INPUT': layer,
-        'DISTANCE': dist,
-        'SEGMENTS': 5,
-        'END_CAP_STYLE': 0,
-        'JOIN_STYLE': 0,
-        'MITER_LIMIT': 2,
-        'DISSOLVE': False,
-        'OUTPUT': 'memory:'
-    })
-    out_layer = res['OUTPUT']
-    out_layer.setName(out_name)
-    QgsProject.instance().addMapLayer(out_layer)
-    result = {"status": "success", "layer_name": out_name, "distance_used": dist}
+    try:
+        res = processing.run("native:buffer", {
+            'INPUT': layer,
+            'DISTANCE': dist,
+            'SEGMENTS': 5,
+            'END_CAP_STYLE': 0,
+            'JOIN_STYLE': 0,
+            'MITER_LIMIT': 2,
+            'DISSOLVE': False,
+            'OUTPUT': 'memory:'
+        })
+        out_layer = res['OUTPUT']
+        out_layer.setName(out_name)
+        QgsProject.instance().addMapLayer(out_layer)
+        
+        # Verification Gate
+        count = out_layer.featureCount()
+        if count == 0:
+            result = {"warning": "Buffer successful but result is empty.", "layer_name": out_name}
+        else:
+            result = {"status": "success", "layer_name": out_name, "feature_count": count}
+    except Exception as e:
+        result = {"error": f"Processing failed: {str(e)}"}
 else:
     result = {"error": "Layer not found"}
 ```

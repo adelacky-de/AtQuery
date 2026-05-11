@@ -1,6 +1,30 @@
-# Toolbox: DataInspection
+# Skill: DataInspection
 
-Detailed metadata about layers, their fields, attributes, and Coordinate Reference Systems.
+Guides the agent through inspecting layer metadata, attribute schemas, and feature records with high-fidelity HTML rendering.
+
+## When to Use
+- When the user asks about the "columns", "metadata", or "schema" of a layer.
+- When the user wants to "see" or "show" data records from a layer.
+- When sorting or filtering data in the chat view.
+
+## Process
+1. **Field Discovery**: Use `QgsVectorLayer_fields` to understand the schema.
+2. **Constraint Validation**: Ensure row limits (clamped to 50) and parameter logic (sort/filter) are correct.
+3. **Rendering**: Generate the HTML table using the `get_layer_features_sample` tool.
+4. **Verification**: Confirm that the tool output contains the `PRESERVE_AS_HTML` key to trigger the UI interceptor.
+
+## Anti-Rationalizations
+| Agent Excuse | Rebuttal |
+| :--- | :--- |
+| "I'll summarize the table as a list to be helpful." | **STRICT NO.** The UI renders HTML better than you can write text. Return ONLY the HTML. |
+| "I'll guess the field names based on the layer name." | **NO.** Always call `QgsVectorLayer_fields` first. |
+| "I'll make up sample data if the tool fails." | **NO.** If the tool returns an error, report it. Never hallucinate rows. |
+
+## Verification Gates
+- **HTML Presence**: Every data request MUST result in a `PRESERVE_AS_HTML` key.
+- **Row Clamp**: Ensure no more than 50 rows are requested to prevent context overflow.
+
+---
 
 ### Tool: QgsVectorLayer_fields
 - **Description**: Lists all field names and types for a given layer.
