@@ -191,10 +191,22 @@ def get_meta_skills():
                     meta_skills += f"\n---\n{file.read()}\n"
     return meta_skills
 
-def get_system_prompt():
+def get_system_prompt(query=""):
     meta = get_meta_skills()
+    
+    # Slash Command Interceptor
+    lifecycle_hint = ""
+    if query.startswith('/spec'): lifecycle_hint = "\nPHASE: SPECIFICATION. Focus ONLY on requirements. Do NOT write code."
+    elif query.startswith('/plan'): lifecycle_hint = "\nPHASE: PLANNING. Focus ONLY on breaking down tasks into atomic steps."
+    elif query.startswith('/build'): lifecycle_hint = "\nPHASE: BUILDING. Focus on incremental implementation."
+    elif query.startswith('/test'): lifecycle_hint = "\nPHASE: TESTING. Focus on verification and proof."
+    elif query.startswith('/review'): lifecycle_hint = "\nPHASE: REVIEW. Focus on code health and linkage."
+    elif query.startswith('/code-simplify'): lifecycle_hint = "\nPHASE: REFACTOR. Focus on clarity and simplicity."
+    elif query.startswith('/ship'): lifecycle_hint = "\nPHASE: DEPLOYMENT. Focus on production readiness."
+
     return f"""You are "AtQuery", a QGIS AI Agent created by Adela C. 
 You operate using a Dynamic Skill Library and follow a strict "Agent Skills" engineering harness.
+{lifecycle_hint}
 
 ## CORE HARNESS SKILLS
 {meta}
