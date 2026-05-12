@@ -107,8 +107,9 @@ class AtQueryDockWidget(QtWidgets.QDockWidget):
         """
         self.chat_display.setHtml(welcome_html)
         
-        self.user_input = QtWidgets.QLineEdit()
-        self.user_input.setPlaceholderText("Ask a question...")
+        from .AtQuery_input import DropLineEdit
+        self.user_input = DropLineEdit()
+        self.user_input.setPlaceholderText("Ask a question or drag a layer here...")
         self.user_input.returnPressed.connect(self._send_query)
         
         layout.addWidget(self.chat_display)
