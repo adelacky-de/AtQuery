@@ -38,20 +38,20 @@ class DropLineEdit(QtWidgets.QLineEdit):
             if os.path.exists(dropped_text):
                 dropped_text = os.path.basename(dropped_text).split('.')[0]
             
+            # Manually insert the text
             self.insert(dropped_text)
             self.setFocus()
             
-            # CRITICAL: Set to IgnoreAction so the source (QGIS) 
-            # thinks the drop was cancelled and won't delete the layer.
-            event.setDropAction(QtCore.Qt.IgnoreAction)
-            event.accept()
+            # CRITICAL: We IGNORE the event. 
+            # This makes the source (QGIS) think the drop was REJECTED.
+            # Thus, QGIS will NOT delete the layer from the legend.
+            event.ignore()
         else:
             from qgis.utils import iface
             layer = iface.activeLayer()
             if layer:
                 self.insert(layer.name())
                 self.setFocus()
-                event.setDropAction(QtCore.Qt.IgnoreAction)
-                event.accept()
+                event.ignore()
             else:
                 event.ignore()
