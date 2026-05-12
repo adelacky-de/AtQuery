@@ -152,9 +152,14 @@ if layer:
     field = args.get('field_name', '')
     fields_list = [field] if field else []
     
+    input_source = layer
+    if layer.selectedFeatureCount() > 0:
+        from qgis.core import QgsProcessingFeatureSourceDefinition
+        input_source = QgsProcessingFeatureSourceDefinition(layer.id(), True)
+    
     out_name = f"{layer.name()}_dissolved"
     res = processing.run("native:dissolve", {
-        'INPUT': layer,
+        'INPUT': input_source,
         'FIELD': fields_list,
         'OUTPUT': 'memory:'
     })
@@ -190,10 +195,19 @@ input_layer = self._resolve_layer(args['input_layer_name'])
 overlay_layer = self._resolve_layer(args['overlay_layer_name'])
 
 if input_layer and overlay_layer:
+    from qgis.core import QgsProcessingFeatureSourceDefinition
+    in_source = input_layer
+    if input_layer.selectedFeatureCount() > 0:
+        in_source = QgsProcessingFeatureSourceDefinition(input_layer.id(), True)
+    
+    over_source = overlay_layer
+    if overlay_layer.selectedFeatureCount() > 0:
+        over_source = QgsProcessingFeatureSourceDefinition(overlay_layer.id(), True)
+
     out_name = f"{input_layer.name()}_difference"
     res = processing.run("native:difference", {
-        'INPUT': input_layer,
-        'OVERLAY': overlay_layer,
+        'INPUT': in_source,
+        'OVERLAY': over_source,
         'OUTPUT': 'memory:'
     })
     out_layer = res['OUTPUT']
@@ -312,6 +326,7 @@ import processing
 input_layer = self._resolve_layer(args['input_layer_name'])
 overlay_layer = self._resolve_layer(args['overlay_layer_name'])
 
+if input_layer and overlay_layer:
     from qgis.core import QgsProcessingFeatureSourceDefinition
     
     in_source = input_layer
@@ -358,9 +373,14 @@ import processing
 layer = self._resolve_layer(args['layer_name'])
 
 if layer:
+    input_source = layer
+    if layer.selectedFeatureCount() > 0:
+        from qgis.core import QgsProcessingFeatureSourceDefinition
+        input_source = QgsProcessingFeatureSourceDefinition(layer.id(), True)
+
     out_name = f"{layer.name()}_centroids"
     res = processing.run("native:centroids", {
-        'INPUT': layer,
+        'INPUT': input_source,
         'ALL_PARTS': False,
         'OUTPUT': 'memory:'
     })
