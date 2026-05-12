@@ -25,6 +25,8 @@ Use these questions to verify the functional integrity and "harness" discipline 
 - **Expected**: Calls `native_buffer`. Creates a new 'Buffered' layer.
 - **Question**: "Clip the DCD layer using the current selection in GOVT_PRS."
 - **Expected**: Calls `native_clip`. Creates a clipped output.
+- **Question**: "Extract the selected features from the DCD layer into a new layer."
+- **Expected**: Calls `extract_selected_features`. Creates a new memory layer named `DCD_selection`.
 
 ## 5. Styling & Canvas Control
 - **Question**: "Change the color of the GOVT_PRS layer to red."

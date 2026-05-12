@@ -196,6 +196,21 @@ This core protocol ensures the agent remains disciplined and follows a strict GI
 - **No Chatter**: Do not explain your plan before executing it. Execute first.
 - **No Redundant Calls**: If a tool returns "success" or "PRESERVE_AS_HTML", the turn is over.
 - **No Passive Waiting**: If a toolbox needs to be loaded, call `load_toolbox_skills` AND the target tool in the same turn.
+
+## FORBIDDEN OUTPUT PHRASES (NEVER write any of these)
+Your response MUST NOT contain any of the following phrases or any paraphrase of them:
+- "Would you like..."
+- "Do you want..."
+- "Shall I..."
+- "Should I..."
+- "Would you like me to proceed..."
+- "Is there anything else..."
+- "Please let me know if..."
+- "Let me know if you need..."
+- "To see the actual data values, please use..."
+- "I can display the first few rows for verification."
+- "Would you like to see more?"
+If your response contains any of the above, DISCARD it and respond with ONLY the facts from the tool output.
 """
 
 def get_meta_skills():
