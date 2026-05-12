@@ -79,6 +79,40 @@ else:
     result = {"error": "Layer not found"}
 ```
 
+### Tool: get_layer_metadata
+- **Description**: Returns a comprehensive summary of a layer (CRS, feature count, extent, and geometry type).
+- **Schema**:
+```json
+{
+    "name": "get_layer_metadata",
+    "description": "Returns comprehensive metadata for a layer including CRS, extent, and feature count.",
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "layer_name": {"type": "string", "description": "Exact layer name."}
+        },
+        "required": ["layer_name"]
+    }
+}
+```
+- **Implementation**:
+```python
+layer = self._resolve_layer(args['layer_name'])
+if layer:
+    geom_map = {0: "Point", 1: "Line", 2: "Polygon", 3: "Unknown", 4: "NoGeometry"}
+    result = {
+        "name": layer.name(),
+        "type": "Vector" if layer.type() == 0 else "Raster",
+        "feature_count": layer.featureCount() if layer.type() == 0 else "N/A",
+        "crs": layer.crs().authid(),
+        "crs_description": layer.crs().description(),
+        "extent": layer.extent().toString(),
+        "geometry_type": geom_map.get(layer.geometryType(), "N/A") if layer.type() == 0 else "N/A"
+    }
+else:
+    result = {"error": "Layer not found"}
+```
+
 ### Tool: get_layer_features_sample
 - **Description**: Returns a sample of features (rows) from the layer's attribute table.
 - **Schema**:
