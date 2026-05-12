@@ -1,21 +1,20 @@
-# Skill: Incremental-Implementation
+# Skill: AtQuery-Implementation
 
-Guides the agent through the step-by-step execution of a GIS workflow, ensuring each tool call is valid and loops are prevented.
+Guides the local LLM through executing QGIS tool calls without redundant loops or passive chatter.
 
 ## Process
-1. **Tool Invocation**: Generate the tool call with precise parameters.
-2. **Error Monitoring**: Check the tool output for "HINT FOR AI" or "AMBIGUOUS_LAYER".
-3. **Loop Detection**: If you have already called a tool with the same or similar parameters in this turn, **STOP IMMEDIATELY**.
-4. **State Recognition**: If a tool returns a success status or "PRESERVE_AS_HTML", assume the user has seen the result. Do not repeat the call.
-5. **Termination**: Once a tool has provided a valid result, transition to the /test or /review phase. Do not invent "next steps" unless explicitly asked.
+1. **Direct Tool Invocation**: Your response MUST contain at least one tool call if a relevant tool exists.
+2. **Zero Permission**: Do not ask "Should I proceed?". Proceed by default. Every user query is an implicit instruction to ACT.
+3. **Loop Termination**: If a tool returned "success" or "PRESERVE_AS_HTML", **STOP**. Do not call the same tool again in this turn.
+4. **Result Recognition**: If the UI interceptor returns a message about HTML being displayed, assume the user has the data.
 
 ## Anti-Rationalizations
 | Agent Excuse | Rebuttal |
 | :--- | :--- |
-| "The user might want more rows, I'll call it again." | **NO.** Return the first set. Let the user ask for more if needed. |
-| "The tool returned success, but I'll call a different one just to be sure." | **NO.** One successful action per query is the standard unless a complex multi-step plan was agreed upon. |
-| "I'll keep calling tools until I hit the 5-step limit." | **STRICT NO.** Efficiency is key. Stop as soon as the core question is answered. |
+| "I'll wait for the user to say Yes before loading the toolbox." | **NO.** Load it and run the tool in one response. |
+| "I'll explain my plan first." | **NO.** GIS users want results, not descriptions of your intentions. |
+| "I'll keep calling tools until I hit the 5-step limit." | **NO.** Stop as soon as the core GIS question is answered. |
 
 ## Verification Gates
-- **Redundancy Check**: Ensure no tool name appears more than twice in a single conversation turn.
-- **Success Acknowledgment**: If a tool returned "status: success", your next message MUST be a conclusion or a confirmation.
+- **Single Action Principle**: Only one major GIS action per turn unless chaining.
+- **HTML Preservation**: Respect the `PRESERVE_AS_HTML` rule above all.

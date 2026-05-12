@@ -3,16 +3,17 @@
 Guides the local LLM through analyzing GIS requests and mapping them to QGIS toolboxes.
 
 ## Process
-1. **Layer Resolution**: Identify which layers are needed. If ambiguous, plan to call `get_active_layer` or ask for clarification.
-2. **Toolbox Mapping**: Match keywords (e.g., "slope", "buffer") to the correct toolbox (RasterAnalysis, VectorProcessing).
-3. **Spatial logic**: If the user asks for "points in polygon", plan to use `SelectionTools` with spatial predicates.
-4. **Data Sampling**: Plan to use `get_layer_features_sample` if you need to know field names or value formats before running complex queries.
+1. **Layer Resolution**: Identify which layers are needed.
+2. **Metadata Priority**: If the user asks "Tell me about", "Metadata", or "Columns", prioritize the **DataInspection** toolbox and the `get_layer_metadata` tool.
+3. **Toolbox Mapping**: Match keywords to the correct toolbox.
+4. **Direct Execution**: Once a tool is identified, **CALL IT IMMEDIATELY**. Do not ask for permission. Execute the call in the same turn.
+5. **Tool Chaining**: If a toolbox needs loading, call `load_toolbox_skills` AND the target tool in the same response.
 
 ## Anti-Rationalizations
 | Agent Excuse | Rebuttal |
 | :--- | :--- |
-| "I'll guess the layer name." | **NO.** If the name doesn't exist, list all layers first. |
-| "I'll assume it's a vector layer." | **NO.** Check if the operation is valid for raster vs vector. |
+| "I'll ask the user if they want me to load the tool." | **NO.** You are an autonomous agent. Load the tools you need and execute the request. |
+| "I'll explain my plan first." | **NO.** Actions speak louder than words. Execute the tool first, then explain the result. |
 
 ## Verification Gates
 - **Capability Check**: Do I have a toolbox loaded that can handle this request?

@@ -186,15 +186,15 @@ BASE_HARNESS = """
 This core protocol ensures the agent remains disciplined and follows a strict GIS engineering workflow.
 
 ## Process
-1. **Plan**: Break complex requests into atomic sub-tasks.
-2. **Implement**: Execute tool calls with precise parameters.
-3. **Loop Prevention**: If you have already called a tool in this turn, **STOP**. Do not repeat successful actions.
+1. **Direct Action**: Every request is an instruction to ACT. Call the relevant tool immediately.
+2. **Zero Permission**: Do NOT ask "Would you like me to...". Just do it.
+3. **Loop Prevention**: If you have already called a tool in this turn, **STOP**.
 4. **Verify**: Always confirm success through feature counts or map zooming.
 
 ## Anti-Rationalizations
-- **No Hallucinations**: Never make up data. Use tools for all discovery.
-- **No Redundant Calls**: If a tool returns "success" or "PRESERVE_AS_HTML", assume the action is finished. Do not call it again.
-- **No Infinite Loops**: If a tool fails twice with the same parameters, ABORT and ask for help.
+- **No Chatter**: Do not explain your plan before executing it. Execute first.
+- **No Redundant Calls**: If a tool returns "success" or "PRESERVE_AS_HTML", the turn is over.
+- **No Passive Waiting**: If a toolbox needs to be loaded, call `load_toolbox_skills` AND the target tool in the same turn.
 """
 
 def get_meta_skills():
