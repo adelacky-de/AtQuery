@@ -55,9 +55,15 @@ if layer:
         dist = dist / 111319.9
     
     out_name = f"{layer.name()}_{int(args['distance'])}m_buffer"
+    # Build processing input (use selection if present)
+    input_source = layer
+    if layer.selectedFeatureCount() > 0:
+        from qgis.core import QgsProcessingFeatureSourceDefinition
+        input_source = QgsProcessingFeatureSourceDefinition(layer.id(), True)
+
     try:
         res = processing.run("native:buffer", {
-            'INPUT': layer,
+            'INPUT': input_source,
             'DISTANCE': dist,
             'SEGMENTS': 5,
             'END_CAP_STYLE': 0,
@@ -306,11 +312,20 @@ import processing
 input_layer = self._resolve_layer(args['input_layer_name'])
 overlay_layer = self._resolve_layer(args['overlay_layer_name'])
 
-if input_layer and overlay_layer:
+    from qgis.core import QgsProcessingFeatureSourceDefinition
+    
+    in_source = input_layer
+    if input_layer.selectedFeatureCount() > 0:
+        in_source = QgsProcessingFeatureSourceDefinition(input_layer.id(), True)
+        
+    over_source = overlay_layer
+    if overlay_layer.selectedFeatureCount() > 0:
+        over_source = QgsProcessingFeatureSourceDefinition(overlay_layer.id(), True)
+
     out_name = f"{input_layer.name()}_clipped"
     res = processing.run("native:clip", {
-        'INPUT': input_layer,
-        'OVERLAY': overlay_layer,
+        'INPUT': in_source,
+        'OVERLAY': over_source,
         'OUTPUT': 'memory:'
     })
     out_layer = res['OUTPUT']

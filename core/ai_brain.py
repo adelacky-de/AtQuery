@@ -77,8 +77,9 @@ def identify_toolboxes(query: str) -> list:
             continue
             
         keywords = catalog[tb].get('keywords', [])
+        # Check for multi-word keywords or single words with word boundaries
         for kw in keywords:
-            if re.search(rf'\b{re.escape(kw.lower())}\b', query_clean):
+            if kw.lower() in query_clean:
                 matched.append(tb)
                 break
     return matched

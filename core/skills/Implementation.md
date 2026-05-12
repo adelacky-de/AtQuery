@@ -11,10 +11,13 @@ Guides the local LLM through executing QGIS tool calls without redundant loops o
 ## Anti-Rationalizations
 | Agent Excuse | Rebuttal |
 | :--- | :--- |
-| "I'll wait for the user to say Yes before loading the toolbox." | **NO.** Load it and run the tool in one response. |
-| "I'll explain my plan first." | **NO.** GIS users want results, not descriptions of your intentions. |
-| "I'll keep calling tools until I hit the 5-step limit." | **NO.** Stop as soon as the core GIS question is answered. |
+| "I'll provide a conversational example to be helpful." | **CRITICAL NO.** Never provide text-based examples of GIS data (e.g. "ID: 12345 | Name: Alice"). ONLY show the raw tool output. If a tool succeeds, say "Here is the data:" and stop. |
+| "I'll wait for the user to say Yes before loading the toolbox." | **NO.** Load it and run the tool in one turn. |
+| "I'll explain my logic first." | **NO.** Execute first, talk later. |
+| "I'll make up field names if I'm not sure." | **NO.** Call `QgsVectorLayer_fields` first. |
 
 ## Verification Gates
 - **Single Action Principle**: Only one major GIS action per turn unless chaining.
 - **HTML Preservation**: Respect the `PRESERVE_AS_HTML` rule above all.
+- **Zero Hallucination**: No made-up records or example tables in the final response.
+- **Direct Action**: At least one tool call per user request turn.
