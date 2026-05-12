@@ -195,16 +195,16 @@ from qgis.core import QgsFeatureRequest
 layer = self._resolve_layer(args['layer_name'])
 if layer:
     req = QgsFeatureRequest()
+    limit = args.get('limit')
+    if limit:
+        req.setLimit(limit)
+        
     if args.get('filter'):
         req.setFilterExpression(args['filter'])
     if args.get('sort_by'):
         req.setOrderBy(QgsFeatureRequest.OrderBy([QgsFeatureRequest.OrderByClause(args['sort_by'], args.get('ascending', True))]))
     
-    ids = []
-    limit = args.get('limit')
-    for feat in layer.getFeatures(req):
-        if limit and len(ids) >= limit: break
-        ids.append(feat.id())
+    ids = [feat.id() for feat in layer.getFeatures(req)]
     
     layer.select(ids)
     count = len(ids)

@@ -110,6 +110,8 @@ if layer:
         fields = [f.name() for f in layer.fields()]
         
         req = QgsFeatureRequest()
+        req.setLimit(limit)
+        
         sort_field = args.get('sort_by')
         if sort_field:
             req.setOrderBy(QgsFeatureRequest.OrderBy([QgsFeatureRequest.OrderByClause(sort_field, args.get('ascending', True))]))
@@ -124,7 +126,6 @@ if layer:
         
         count = 0
         for feat in layer.getFeatures(req):
-            if count >= limit: break
             html += '<tr>' + "".join([f'<td style="padding: 4px;">{str(feat.attributes()[i])}</td>' for i in range(len(fields))]) + '</tr>'
             count += 1
         html += '</table>'

@@ -183,13 +183,18 @@ def get_base_tools():
 # --- Base Harness (Hardcoded to ensure functionality even if skills/ directory is missing) ---
 BASE_HARNESS = """
 # Skill: CoreHarness
-This core protocol prevents infinite tool loops and ensures efficiency.
+This core protocol ensures the agent remains disciplined and follows a strict GIS engineering workflow.
 
-## Operational Discipline
-1. **Single Action**: Perform one major GIS action per turn.
-2. **Loop Prevention**: If you have already called a tool in this turn, **STOP**.
-3. **Result Recognition**: If a tool returns success or "PRESERVE_AS_HTML", the task is finished. Do not repeat.
-4. **Abort**: If a tool fails twice with same parameters, ask for clarification.
+## Process
+1. **Plan**: Break complex requests into atomic sub-tasks.
+2. **Implement**: Execute tool calls with precise parameters.
+3. **Loop Prevention**: If you have already called a tool in this turn, **STOP**. Do not repeat successful actions.
+4. **Verify**: Always confirm success through feature counts or map zooming.
+
+## Anti-Rationalizations
+- **No Hallucinations**: Never make up data. Use tools for all discovery.
+- **No Redundant Calls**: If a tool returns "success" or "PRESERVE_AS_HTML", assume the action is finished. Do not call it again.
+- **No Infinite Loops**: If a tool fails twice with the same parameters, ABORT and ask for help.
 """
 
 def get_meta_skills():
@@ -199,7 +204,7 @@ def get_meta_skills():
     if os.path.exists(skills_dir):
         for f in sorted(os.listdir(skills_dir)):
             if f.endswith('.md'):
-                with open(os.path.join(skills_dir, f), 'r') as file:
+                with open(os.path.join(skills_dir, f), 'r', encoding='utf-8') as file:
                     meta_skills += f"\n---\n{file.read()}\n"
     return meta_skills
 
