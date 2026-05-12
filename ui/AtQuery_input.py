@@ -26,9 +26,6 @@ class DropLineEdit(QtWidgets.QLineEdit):
             event.accept()
 
     def dropEvent(self, event):
-        # Force the action to be a Copy, even if the source proposed a Move
-        event.setDropAction(QtCore.Qt.CopyAction)
-        
         mime = event.mimeData()
         dropped_text = ""
         
@@ -43,6 +40,10 @@ class DropLineEdit(QtWidgets.QLineEdit):
             
             self.insert(dropped_text)
             self.setFocus()
+            
+            # CRITICAL: Set to IgnoreAction so the source (QGIS) 
+            # thinks the drop was cancelled and won't delete the layer.
+            event.setDropAction(QtCore.Qt.IgnoreAction)
             event.accept()
         else:
             from qgis.utils import iface
@@ -50,6 +51,7 @@ class DropLineEdit(QtWidgets.QLineEdit):
             if layer:
                 self.insert(layer.name())
                 self.setFocus()
+                event.setDropAction(QtCore.Qt.IgnoreAction)
                 event.accept()
             else:
                 event.ignore()
