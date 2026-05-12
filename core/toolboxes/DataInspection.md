@@ -19,6 +19,7 @@ Guides the agent through inspecting layer metadata, attribute schemas, and featu
 | "I'll summarize the table as a list to be helpful." | **STRICT NO.** The UI renders HTML better than you can write text. Return ONLY the HTML. |
 | "I'll guess the field names based on the layer name." | **NO.** Always call `QgsVectorLayer_fields` first. |
 | "I'll make up sample data if the tool fails." | **NO.** If the tool returns an error, report it. Never hallucinate rows. |
+| "I'll use `get_layer_metadata` to show column values." | **STRICT NO.** `get_layer_metadata` returns NO row data. For any column/value/example request, ALWAYS use `get_layer_features_sample`. |
 
 ## Verification Gates
 - **HTML Presence**: Every data request MUST result in a `PRESERVE_AS_HTML` key.
@@ -100,14 +101,21 @@ else:
 layer = self._resolve_layer(args['layer_name'])
 if layer:
     geom_map = {0: "Point", 1: "Line", 2: "Polygon", 3: "Unknown", 4: "NoGeometry"}
+    ext = layer.extent()
     result = {
         "name": layer.name(),
         "type": "Vector" if layer.type() == 0 else "Raster",
         "feature_count": layer.featureCount() if layer.type() == 0 else "N/A",
         "crs": layer.crs().authid(),
         "crs_description": layer.crs().description(),
-        "extent": layer.extent().toString(),
-        "geometry_type": geom_map.get(layer.geometryType(), "N/A") if layer.type() == 0 else "N/A"
+        "extent": {
+            "xmin": round(ext.xMinimum(), 6),
+            "ymin": round(ext.yMinimum(), 6),
+            "xmax": round(ext.xMaximum(), 6),
+            "ymax": round(ext.yMaximum(), 6)
+        },
+        "geometry_type": geom_map.get(layer.geometryType(), "N/A") if layer.type() == 0 else "N/A",
+        "note": "This tool returns ONLY metadata. To see actual data values, use get_layer_features_sample."
     }
 else:
     result = {"error": "Layer not found"}

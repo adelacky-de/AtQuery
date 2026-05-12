@@ -19,6 +19,8 @@ Guides the agent through spatial and attribute-based feature selection (SQL expr
 | :--- | :--- |
 | "I'll select all features since I'm not sure about the filter." | **NO.** Always ask for clarification or use a conservative filter. |
 | "I don't need to zoom; they can see it in the table." | **NO.** GIS is visual. Always provide map feedback for selections. |
+| "I'll call selectByExpression first, then select_features_advanced for the same query." | **STRICT NO.** Pick ONE tool per query. `selectByExpression` = simple WHERE. `select_features_advanced` = top-N ranked. Never both. |
+| "After selection, I'll display the selected rows as a table." | **STRICT NO.** After selection, ONLY report the count: 'I have selected X features.' Then STOP. |
 
 ## Verification Gates
 - **Selection Count**: If 0 features are selected, inform the user and suggest checking field names/values.

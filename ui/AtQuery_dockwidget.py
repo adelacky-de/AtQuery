@@ -228,8 +228,16 @@ class AtQueryDockWidget(QtWidgets.QDockWidget):
                         try:
                             html_data = json.loads(output).get("PRESERVE_AS_HTML")
                             self.chat_display.append(html_data)
-                            # Update output to prevent AI from summarizing or repeating the data
-                            output = json.dumps({"status": "success", "message": "CRITICAL: The HTML table has been displayed to the user. DO NOT repeat the data. DO NOT summarize the content. Just provide a one-sentence introduction like 'Here is the data from the layer:'."})
+                            # STOP sentinel: The HTML is already rendered. Force the agent to say nothing.
+                            output = json.dumps({"status": "HTML_RENDERED", "AGENT_INSTRUCTION": "STOP. The table is already displayed. Your next response MUST be empty string only. Do not write anything."})
+                            # Immediately append the task completed footer and return — skip the AI summary step entirely
+                            self.chat_display.append("<br>✅ <b>Task completed.</b>")
+                            self.chat_display.append("<br>Not working? Try: &nbsp;&nbsp;<a href='atquery://best-match' style='text-decoration:none;'>⚡ Force Match</a> &nbsp;&nbsp; <a href='atquery://learn' style='text-decoration:none;'>🔍 Search &amp; Learn</a><br><br><hr>")
+                            scrollbar = self.chat_display.verticalScrollBar()
+                            scrollbar.setValue(scrollbar.maximum())
+                            self.conversation_history.append({"role": "user", "content": user_text})
+                            self.conversation_history.append({"role": "assistant", "content": "[HTML table displayed]"})
+                            return
                         except: pass
 
                     tool_outputs.append({"role": "tool", "content": output, "tool_call_id": tc.get("id")})
