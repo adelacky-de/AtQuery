@@ -35,7 +35,7 @@ Guides the agent through inspecting layer metadata, attribute schemas, and featu
 ```json
 {
     "name": "QgsVectorLayer_fields",
-    "description": "Returns a list of field names for the specified layer.",
+    "description": "Returns the list of field/column names for a layer. Use ONLY when the user asks 'what fields does X have', 'list the fields', 'what columns exist' — and they want just names, NOT data values. For actual row data, use get_layer_features_sample.",
     "parameters": {
         "type": "object",
         "properties": {
@@ -129,7 +129,7 @@ else:
 ```json
 {
     "name": "get_layer_features_sample",
-    "description": "PRIMARY data viewing tool. Call this for ANY of these requests: 'show me records', 'what are the columns', 'what fields does X have', 'example values', 'what are the values', 'show me data', 'show me top N', 'show sorted by', 'show filtered by'. Returns real attribute table rows as an HTML table. Supports limit (default 5), sort_by, ascending, and filter parameters.",
+    "description": "PRIMARY data viewing tool. Call this for: 'show me records', 'what are the columns', 'what are the values', 'example values', 'show me data', 'show me top N', 'show sorted by', 'show filtered by'. Returns real attribute table rows as an HTML table. Supports limit (default 5), sort_by, ascending, and filter parameters. Do NOT use this when user only wants a list of field names — use QgsVectorLayer_fields for that.",
     "parameters": {
         "type": "object",
         "properties": {
