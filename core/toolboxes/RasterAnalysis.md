@@ -43,25 +43,35 @@ Guides the agent through terrain analysis and raster manipulation (Slope, Hillsh
 - **Implementation**:
 ```python
 import processing
+from qgis.core import QgsRasterBandStats
 layer = self._resolve_layer(args['input_layer'])
 if layer:
-    try:
-        res = processing.run("gdal:slope", {
-            'INPUT': layer,
-            'BAND': 1,
-            'OUTPUT': 'memory:'
-        })
-        out_layer = res['OUTPUT']
-        QgsProject.instance().addMapLayer(out_layer)
-        
-        # Verification Gate
-        stats = out_layer.dataProvider().bandStatistics(1)
-        if stats.minimum == stats.maximum:
-            result = {"warning": "Slope calculated but output is a flat/constant value.", "layer": out_layer.name()}
-        else:
-            result = {"status": "success", "layer": out_layer.name()}
-    except Exception as e:
-        result = {"error": f"GDAL Slope failed: {str(e)}"}
+    if layer.type() != 1:  # 1 = QgsMapLayer.RasterLayer
+        result = {"error": f"Layer '{layer.name()}' is a vector layer. Slope requires a raster DEM."}
+    else:
+        try:
+            out_name = f"{layer.name()}_slope"
+            res = processing.run("gdal:slope", {
+                'INPUT': layer,
+                'BAND': 1,
+                'AS_PERCENT': False,
+                'SCALE': 1,
+                'COMPUTE_EDGES': False,
+                'ZEVENBERGEN': False,
+                'OUTPUT': 'TEMPORARY_OUTPUT'
+            })
+            out_layer = res['OUTPUT']
+            out_layer.setName(out_name)
+            QgsProject.instance().addMapLayer(out_layer)
+
+            # Verification Gate
+            stats = out_layer.dataProvider().bandStatistics(1, QgsRasterBandStats.All)
+            if stats.minimumValue == stats.maximumValue:
+                result = {"warning": "Slope calculated but output is a flat/constant value — check if the DEM has valid elevation data.", "layer": out_name}
+            else:
+                result = {"status": "success", "layer": out_name, "min_slope": round(stats.minimumValue, 2), "max_slope": round(stats.maximumValue, 2)}
+        except Exception as e:
+            result = {"error": f"GDAL Slope failed: {str(e)}"}
 else:
     result = {"error": "Layer not found"}
 ```
@@ -76,7 +86,10 @@ else:
     "parameters": {
         "type": "object",
         "properties": {
-            "input_layer": {"type": "string"}
+            "input_layer": {"type": "string"},
+            "z_factor": {"type": "number", "description": "Vertical exaggeration factor (default: 1)."},
+            "azimuth": {"type": "number", "description": "Sun azimuth in degrees (default: 315)."},
+            "altitude": {"type": "number", "description": "Sun altitude in degrees (default: 45)."}
         },
         "required": ["input_layer"]
     }
@@ -87,25 +100,33 @@ else:
 import processing
 layer = self._resolve_layer(args['input_layer'])
 if layer:
-    try:
-        res = processing.run("gdal:hillshade", {
-            'INPUT': layer,
-            'BAND': 1,
-            'Z_FACTOR': 1,
-            'AZIMUTH': 315,
-            'ALTITUDE': 45,
-            'OUTPUT': 'memory:'
-        })
-        out_layer = res['OUTPUT']
-        QgsProject.instance().addMapLayer(out_layer)
-        
-        # Verification Gate
-        if out_layer.isValid():
-            result = {"status": "success", "layer": out_layer.name()}
-        else:
-            result = {"error": "Hillshade layer was created but is invalid."}
-    except Exception as e:
-        result = {"error": f"GDAL Hillshade failed: {str(e)}"}
+    if layer.type() != 1:
+        result = {"error": f"Layer '{layer.name()}' is a vector layer. Hillshade requires a raster DEM."}
+    else:
+        try:
+            out_name = f"{layer.name()}_hillshade"
+            res = processing.run("gdal:hillshade", {
+                'INPUT': layer,
+                'BAND': 1,
+                'Z_FACTOR': args.get('z_factor', 1),
+                'AZIMUTH': args.get('azimuth', 315),
+                'ALTITUDE': args.get('altitude', 45),
+                'COMBINED': False,
+                'MULTIDIRECTIONAL': False,
+                'COMPUTE_EDGES': False,
+                'ZEVENBERGEN': False,
+                'OUTPUT': 'TEMPORARY_OUTPUT'
+            })
+            out_layer = res['OUTPUT']
+            out_layer.setName(out_name)
+            QgsProject.instance().addMapLayer(out_layer)
+
+            if out_layer.isValid():
+                result = {"status": "success", "layer": out_name}
+            else:
+                result = {"error": "Hillshade layer was created but is invalid."}
+        except Exception as e:
+            result = {"error": f"GDAL Hillshade failed: {str(e)}"}
 else:
     result = {"error": "Layer not found"}
 ```
@@ -131,22 +152,26 @@ else:
 import processing
 layer = self._resolve_layer(args['input_layer'])
 if layer:
-    try:
-        res = processing.run("gdal:aspect", {
-            'INPUT': layer,
-            'BAND': 1,
-            'OUTPUT': 'memory:'
-        })
-        out_layer = res['OUTPUT']
-        QgsProject.instance().addMapLayer(out_layer)
-        
-        # Verification Gate
-        if out_layer.featureCount() == 0 and out_layer.width() > 0:
-             result = {"status": "success", "layer": out_layer.name()}
-        else:
-             result = {"status": "success", "layer": out_layer.name()}
-    except Exception as e:
-        result = {"error": f"GDAL Aspect failed: {str(e)}"}
+    if layer.type() != 1:
+        result = {"error": f"Layer '{layer.name()}' is a vector layer. Aspect requires a raster DEM."}
+    else:
+        try:
+            out_name = f"{layer.name()}_aspect"
+            res = processing.run("gdal:aspect", {
+                'INPUT': layer,
+                'BAND': 1,
+                'TRIG_ANGLE': False,
+                'ZERO_FLAT': False,
+                'COMPUTE_EDGES': False,
+                'ZEVENBERGEN': False,
+                'OUTPUT': 'TEMPORARY_OUTPUT'
+            })
+            out_layer = res['OUTPUT']
+            out_layer.setName(out_name)
+            QgsProject.instance().addMapLayer(out_layer)
+            result = {"status": "success", "layer": out_name}
+        except Exception as e:
+            result = {"error": f"GDAL Aspect failed: {str(e)}"}
 else:
     result = {"error": "Layer not found"}
 ```
@@ -181,12 +206,16 @@ if raster_layer and mask_layer:
             'INPUT': raster_layer,
             'MASK': mask_layer,
             'KEEP_RESOLUTION': True,
-            'OUTPUT': 'memory:'
+            'SET_RESOLUTION': False,
+            'NODATA': None,
+            'ALPHA_BAND': False,
+            'CROP_TO_CUTLINE': True,
+            'OUTPUT': 'TEMPORARY_OUTPUT'
         })
         out_layer = res['OUTPUT']
         out_layer.setName(out_name)
         QgsProject.instance().addMapLayer(out_layer)
-        
+
         # Verification Gate
         if out_layer.width() == 0 or out_layer.height() == 0:
             result = {"error": "Clipping resulted in an empty raster."}

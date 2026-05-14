@@ -262,8 +262,8 @@ else:
     "parameters": {
         "type": "object",
         "properties": {
-            "input_layer": {"type": "string", "description": "The target layer to append attributes to."},
-            "join_layer": {"type": "string", "description": "The layer containing the attributes to join."},
+            "input_layer_name": {"type": "string", "description": "The target layer to append attributes to."},
+            "join_layer_name": {"type": "string", "description": "The layer containing the attributes to join."},
             "predicate": {
                 "type": "array",
                 "items": {"type": "integer"},
@@ -282,13 +282,20 @@ join_layer = self._resolve_layer(args['join_layer_name'])
 
 if input_layer and join_layer:
     pred_map = {"intersect": 0, "contain": 1, "equal": 3, "touch": 4, "overlap": 5, "are within": 6, "cross": 7}
-    p_val = pred_map.get(args.get('predicate', 'intersect').lower(), 0)
+    pred_arg = args.get('predicate', 'intersect')
+    # Handle both string name ("intersect") and integer list ([0])
+    if isinstance(pred_arg, list):
+        p_list = [int(p) for p in pred_arg]
+    elif isinstance(pred_arg, int):
+        p_list = [pred_arg]
+    else:
+        p_list = [pred_map.get(str(pred_arg).lower(), 0)]
     
     out_name = f"{input_layer.name()}_joined"
     res = processing.run("native:joinattributesbylocation", {
         'INPUT': input_layer,
         'JOIN': join_layer,
-        'PREDICATE': [p_val],
+        'PREDICATE': p_list,
         'JOIN_FIELDS': [],
         'METHOD': 0,
         'DISCARD_NONMATCHING': False,
@@ -822,6 +829,99 @@ if layer:
     out_layer.setName(out_name)
     QgsProject.instance().addMapLayer(out_layer)
     result = {"status": "success", "layer_name": out_name}
+else:
+    result = {"error": "Layer not found"}
+```
+
+### Tool: processing_run_native_mergevectorlayers
+- **Description**: Merges multiple vector layers of the same geometry type into a single layer.
+- **Schema**:
+```json
+{
+    "name": "processing_run_native_mergevectorlayers",
+    "description": "Merges two or more vector layers into one. All layers must have the same geometry type (e.g., all polygons).",
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "layer_names": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "List of layer names to merge together."
+            },
+            "output_name": {
+                "type": "string",
+                "description": "Name for the merged output layer. Optional."
+            }
+        },
+        "required": ["layer_names"]
+    }
+}
+```
+- **Implementation**:
+```python
+import processing
+from qgis.core import QgsProject
+
+names = args.get('layer_names', [])
+layers = []
+missing = []
+for n in names:
+    lyr = self._resolve_layer(n)
+    if lyr:
+        layers.append(lyr)
+    else:
+        missing.append(n)
+
+if missing:
+    result = {"error": f"Layers not found: {', '.join(missing)}"}
+elif len(layers) < 2:
+    result = {"error": "At least 2 valid layers are required to merge."}
+else:
+    out_name = args.get('output_name') or "_".join([l.name() for l in layers[:2]]) + "_merged"
+    res = processing.run("native:mergevectorlayers", {
+        'LAYERS': layers,
+        'CRS': layers[0].crs(),
+        'OUTPUT': 'memory:'
+    })
+    out_layer = res['OUTPUT']
+    out_layer.setName(out_name)
+    QgsProject.instance().addMapLayer(out_layer)
+    result = {"status": "success", "layer_name": out_name, "feature_count": out_layer.featureCount()}
+```
+
+### Tool: processing_run_native_simplifygeometries
+- **Description**: Simplifies features by removing vertices, reducing file size while preserving shape.
+- **Schema**:
+```json
+{
+    "name": "processing_run_native_simplifygeometries",
+    "description": "Simplifies the geometries in a vector layer using a tolerance value.",
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "layer_name": {"type": "string"},
+            "tolerance": {"type": "number", "description": "Simplification tolerance in layer units. Larger = more simplification."}
+        },
+        "required": ["layer_name", "tolerance"]
+    }
+}
+```
+- **Implementation**:
+```python
+import processing
+layer = self._resolve_layer(args['layer_name'])
+if layer:
+    out_name = f"{layer.name()}_simplified"
+    res = processing.run("native:simplifygeometries", {
+        'INPUT': layer,
+        'METHOD': 0,
+        'TOLERANCE': args['tolerance'],
+        'OUTPUT': 'memory:'
+    })
+    out_layer = res['OUTPUT']
+    out_layer.setName(out_name)
+    QgsProject.instance().addMapLayer(out_layer)
+    result = {"status": "success", "layer_name": out_name, "feature_count": out_layer.featureCount()}
 else:
     result = {"error": "Layer not found"}
 ```

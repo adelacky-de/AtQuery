@@ -94,10 +94,10 @@ else:
         layer.triggerRepaint()
         layer.styleChanged.emit()
         
-        if hasattr(iface, 'layerTreeView'):
-            iface.layerTreeView().refreshLayerSymbology(layer.id())
+        if hasattr(self.iface, 'layerTreeView'):
+            self.iface.layerTreeView().refreshLayerSymbology(layer.id())
             
-        iface.mapCanvas().refresh()
+        self.iface.mapCanvas().refresh()
         
         result = {"status": "success", "message": f"Opacity of '{layer.name()}' set to {val}%"}
     except Exception as e:
@@ -156,4 +156,83 @@ self.iface.mapCanvas().setCenter(center)
 self.iface.mapCanvas().zoomScale(scale)
 self.iface.mapCanvas().refresh()
 result = {"status": "success", "message": f"Zoomed to {x}, {y} at scale {scale}"}
+```
+
+### Tool: set_layer_visibility
+```json
+{
+  "name": "set_layer_visibility",
+  "description": "Shows or hides a layer in the QGIS layer tree (legend). Use this for 'hide', 'show', 'turn off', 'turn on' a layer.",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "layer_name": {"type": "string", "description": "The name of the layer to show or hide."},
+      "visible": {"type": "boolean", "description": "true to show the layer, false to hide it."}
+    },
+    "required": ["layer_name", "visible"]
+  }
+}
+```
+
+```python
+from qgis.core import QgsProject
+layer = self._resolve_layer(args['layer_name'])
+if not layer:
+    result = {"error": f"Layer '{args['layer_name']}' not found."}
+else:
+    visible = bool(args['visible'])
+    root = QgsProject.instance().layerTreeRoot()
+    node = root.findLayer(layer.id())
+    if node:
+        node.setItemVisibilityChecked(visible)
+        self.iface.mapCanvas().refresh()
+        state = "visible" if visible else "hidden"
+        result = {"status": "success", "message": f"Layer '{layer.name()}' is now {state}."}
+    else:
+        result = {"error": "Layer node not found in tree."}
+```
+
+### Tool: remove_layer
+```json
+{
+  "name": "remove_layer",
+  "description": "Removes a layer from the QGIS project and map canvas. Use for 'remove', 'delete', or 'close' a layer.",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "layer_name": {"type": "string", "description": "The name of the layer to remove."}
+    },
+    "required": ["layer_name"]
+  }
+}
+```
+
+```python
+from qgis.core import QgsProject
+layer = self._resolve_layer(args['layer_name'])
+if not layer:
+    result = {"error": f"Layer '{args['layer_name']}' not found."}
+else:
+    name = layer.name()
+    QgsProject.instance().removeMapLayer(layer.id())
+    self.iface.mapCanvas().refresh()
+    result = {"status": "success", "message": f"Layer '{name}' has been removed from the project."}
+```
+
+### Tool: zoom_to_full_extent
+```json
+{
+  "name": "zoom_to_full_extent",
+  "description": "Zooms the map canvas out to show all loaded layers (full project extent). Use for 'zoom to all', 'zoom out', 'see everything'.",
+  "parameters": {
+    "type": "object",
+    "properties": {}
+  }
+}
+```
+
+```python
+self.iface.mapCanvas().zoomToFullExtent()
+self.iface.mapCanvas().refresh()
+result = {"status": "success", "message": "Zoomed to full project extent."}
 ```

@@ -1,5 +1,6 @@
 # AtQuery_input.py
 
+import os
 from qgis.PyQt import QtWidgets, QtCore, QtGui
 
 class DropLineEdit(QtWidgets.QLineEdit):
