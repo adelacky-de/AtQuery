@@ -1,13 +1,13 @@
 # 🌍 AtQuery: The Agentic QGIS Assistant
 
-**AtQuery** is a high-performance QGIS plugin that brings the power of Agentic AI directly to your geospatial workspace. By bridging the gap between natural language and **PyQGIS**, AtQuery allows you to query, analyze, and automate GIS workflows without writing a single line of code.
+**AtQuery** is a QGIS plugin that brings the Agentic AI directly to your geospatial workspace. By bridging the gap between natural language and **PyQGIS**, AtQuery allows you to query, analyze, and automate GIS workflows without writing a single line of code.
 
 ---
 
 ## 🚀 Key Features
 
-- **Natural Language GIS**: No more searching through menus. Ask QGIS questions like "Where are the schools?" or commands like "Buffer the parks by 100m."
-*   **Agentic Reasoning (Mini-MCP)**: Powered by a dynamic tool-calling loop. The AI checks your layers, inspects their attributes, and chooses the right GIS tool autonomously.
+- **Natural Language GIS**: No more searching through menus and the toolbox. Ask QGIS questions like "Buffer the parks by 100m."
+*   **Agentic Reasoning **: Powered by a dynamic tool-calling loop. The AI analyses your query, extract the keywords, checks your layers, inspects their attributes, and chooses the right GIS tool autonomously.
 *   **Local & Private**: Runs entirely on your machine using **Ollama**. Your data never leaves your computer, ensuring total privacy and zero API costs.
 *   **Modular Skill Library**: Capabilities are organized into "Toolboxes" (Markdown files). The system only loads the skills relevant to your specific request.
 *   **Self-Expanding Skill Library (Online Search)**: If AtQuery lacks a built-in skill, click "Search & Learn New Skill" to let the AI automatically synthesize a new QGIS tool from its knowledge and save it to your local `community_toolbox.json` store for future use.
@@ -17,7 +17,7 @@
 
 ## 📖 Prompt Examples
 
-AtQuery can handle a wide variety of tasks. Here are some things you can try:
+AtQuery can handle a wide variety of tasks. Most of the queries have been tested but not all. Below are some things you can try, and you are welcome to tell me to update the missing tools or the prompt as needed.
 
 ### 🔍 Project Discovery & Data Inspection
 - *"List all the layers in my map."*
@@ -82,8 +82,6 @@ AtQuery uses a **Dynamic Skill Library** architecture:
 ## 👤 Credits & Support
 
 **AtQuery** was created by **Adela C**. 
-
-- **Repository**: [https://github.com/adelacky-de/atquery](https://github.com/adelacky-de/atquery)
-- **Issues**: Report bugs or request features on the [Issue Tracker](https://github.com/adelacky-de/atquery/issues).
+- **Issues**: Report bugs or request features to adelacky.de@gmail.com
 
 *Transforming GIS from a tool you operate into a partner you converse with.*
