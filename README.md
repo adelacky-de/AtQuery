@@ -189,9 +189,18 @@ AtQuery/
 
 ---
 
-## 👤 Credits & Support
+## 👤 About & Story
 
 **AtQuery** was created by **Adela C**.
-- **Issues**: Report bugs or request features to adelacky.de@gmail.com
+
+This project started in **November 2025** after watching a classmate struggle to learn a new GIS software from scratch. The idea was simple: what if you could just *ask* it what to do? I built an early prototype, but it was quickly halted by model capability — the models available at the time were too slow to run usably on my desktop.
+
+In **April 2026**, with the release of faster and more capable small models, I picked the project back up, rebuilt the core architecture, and set it to **public visibility**.
+
+Most of the queries listed here have been tested and confirmed working. But I believe there are far more GIS operations that could be supported — the toolbox system is designed to be extended. **If you're interested, please test it and report back to me.** Bug reports, missing tools, and ideas are all welcome.
+
+- 📧 **Contact**: adelacky.de@gmail.com
+
+---
 
 *Transforming GIS from a tool you operate into a partner you converse with.*
