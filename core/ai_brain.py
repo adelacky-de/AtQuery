@@ -58,31 +58,71 @@ def _load_catalog_from_md():
 
 def identify_toolboxes(query: str) -> list:
     """
-    Keyword-matches the query against toolbox names.
-    Returns list of toolbox names to load.
+    Score-based toolbox routing.
+    Each toolbox gets a score = number of its keywords found in the query.
+    Only the highest-scoring toolbox(es) are loaded, capped at 2.
+    This prevents multi-keyword queries from loading too many toolboxes and
+    confusing the AI with an overloaded tool list.
     """
     query_clean = query.lower()
-    
-    # ── HARD RULE: PREVENT ACTIVE LAYER DISTRACTION ──
-    # If the user provides a specific layer name, we skip ProjectDiscovery (which triggers get_active_layer)
-    # to prevent the AI from getting confused by the 'currently active' layer.
+
+    # ── HARD RULE: suppress ProjectDiscovery if a specific layer is named ──
     all_layers = [l.name().lower() for l in QgsProject.instance().mapLayers().values()]
     has_specific_layer = any(l in query_clean for l in all_layers if len(l) > 2)
-    
-    matched = []
+
+    # ── INTENT OVERRIDE: resolve the DataInspection vs SelectionTools collision ──
+    # "show me / display / what are / list / give me" → display intent → DataInspection wins
+    DISPLAY_TRIGGERS = ("show me", "display", "what are", "give me", "list the",
+                        "columns", "example values", "what fields", "how many")
+    # "select / pick / highlight / choose" → selection intent → SelectionTools wins
+    SELECT_TRIGGERS  = ("select ", "pick ", "highlight ", "choose ", "deselect", "clear selection")
+
+    display_intent = any(t in query_clean for t in DISPLAY_TRIGGERS)
+    select_intent  = any(t in query_clean for t in SELECT_TRIGGERS)
+
     catalog = _load_catalog_from_md()
+    scores = {}
+
     for tb in catalog:
-        # Skip ProjectDiscovery if we have a specific layer name target
         if tb == "ProjectDiscovery" and has_specific_layer:
             continue
-            
+
         keywords = catalog[tb].get('keywords', [])
-        # Check for multi-word keywords or single words with word boundaries
-        for kw in keywords:
-            if kw.lower() in query_clean:
-                matched.append(tb)
-                break
-    return matched
+        score = sum(1 for kw in keywords if kw.lower() in query_clean)
+        if score > 0:
+            scores[tb] = score
+
+    if not scores:
+        return []
+
+    # ── Apply intent overrides to break ties ──
+    if display_intent and not select_intent:
+        # Boost DataInspection, dampen SelectionTools
+        if "DataInspection" in scores:
+            scores["DataInspection"] += 2
+        if "SelectionTools" in scores:
+            scores["SelectionTools"] = max(0, scores["SelectionTools"] - 1)
+    elif select_intent and not display_intent:
+        # Boost SelectionTools, dampen DataInspection
+        if "SelectionTools" in scores:
+            scores["SelectionTools"] += 2
+        if "DataInspection" in scores:
+            scores["DataInspection"] = max(0, scores["DataInspection"] - 1)
+
+    # Remove zero-score entries that may have been dampened
+    scores = {tb: s for tb, s in scores.items() if s > 0}
+    if not scores:
+        return []
+
+    # Sort by score descending
+    ranked = sorted(scores.items(), key=lambda x: x[1], reverse=True)
+    top_score = ranked[0][1]
+
+    # Load only toolboxes within 1 point of the top score, capped at 2
+    # (A gap of ≥2 means one toolbox clearly dominates — load only that one)
+    result = [tb for tb, s in ranked if s >= top_score - 1][:2]
+    return result
+
 
 
 def get_available_toolboxes_summary() -> str:
