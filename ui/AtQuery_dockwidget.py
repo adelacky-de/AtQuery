@@ -183,6 +183,25 @@ class AtQueryDockWidget(QtWidgets.QDockWidget):
                     content = ai_msg.get("content", "").strip()
                     # Only mark executed if a real GIS tool already ran this turn
                     if gis_tools_called:
+                        # ── HALLUCINATION GUARD ─────────────────────────────────────────
+                        # If the model called get_layer_metadata but responded with invented
+                        # column lists or data tables, strip the fabricated content.
+                        # Real metadata results never contain markdown table syntax (|---|).
+                        if "get_layer_metadata" in gis_tools_called and "|---|" in content:
+                            # Extract only the metadata facts from tool outputs (real data)
+                            real_outputs = [m.get("content","") for m in current_turn_history if m.get("role") == "tool"]
+                            if real_outputs:
+                                try:
+                                    meta = json.loads(real_outputs[0])
+                                    content = (
+                                        f"<b>{meta.get('name','Layer')}</b><br>"
+                                        f"Feature count: {meta.get('feature_count','?')}<br>"
+                                        f"CRS: {meta.get('crs','?')} — {meta.get('crs_description','')}<br>"
+                                        f"Extent: {meta.get('extent','?')}<br>"
+                                        f"<i>⚠️ For column names and data values, ask: 'Show me records from this layer.'</i>"
+                                    )
+                                except:
+                                    content = "Metadata retrieved. For column names and row data, ask: 'Show me records from this layer.'"
                         if not content:
                             content = "Action completed successfully."
                         elif "completed" not in content.lower() and "success" not in content.lower() and "failed" not in content.lower() and "error" not in content.lower():
@@ -191,6 +210,7 @@ class AtQueryDockWidget(QtWidgets.QDockWidget):
                     if content:
                         self.handle_ai_response(content, ai_msg.get("suggested_queries"))
                     break
+
 
                 tool_outputs = []
                 for tc in ai_msg["tool_calls"]:

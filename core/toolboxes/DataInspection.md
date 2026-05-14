@@ -88,7 +88,7 @@ else:
 ```json
 {
     "name": "get_layer_metadata",
-    "description": "Returns comprehensive metadata for a layer including CRS, extent, and feature count.",
+    "description": "Returns ONLY CRS, extent, geometry type, and feature COUNT for a layer. Use ONLY for 'tell me about', 'what is the CRS', 'describe layer' queries. WARNING: This tool returns NO field names and NO data rows. If the user asks for columns, values, fields, records, or example data — do NOT call this tool. Use get_layer_features_sample instead.",
     "parameters": {
         "type": "object",
         "properties": {
@@ -129,15 +129,15 @@ else:
 ```json
 {
     "name": "get_layer_features_sample",
-    "description": "Returns a sample of attribute values (first 10 rows) for the specified layer.",
+    "description": "PRIMARY data viewing tool. Call this for ANY of these requests: 'show me records', 'what are the columns', 'what fields does X have', 'example values', 'what are the values', 'show me data', 'show me top N', 'show sorted by', 'show filtered by'. Returns real attribute table rows as an HTML table. Supports limit (default 5), sort_by, ascending, and filter parameters.",
     "parameters": {
         "type": "object",
         "properties": {
             "layer_name": {"type": "string", "description": "Exact layer name."},
-            "limit": {"type": "integer", "description": "Number of features to return (default 5, max 50)."},
+            "limit": {"type": "integer", "description": "Number of rows to return (default 5, max 50)."},
             "sort_by": {"type": "string", "description": "Field name to sort by."},
-            "ascending": {"type": "boolean", "description": "Sort order (default true)."},
-            "filter": {"type": "string", "description": "Optional QGIS expression to filter features (e.g., \"NAME_EN\" = 'Southern District')."}
+            "ascending": {"type": "boolean", "description": "Sort ascending (true) or descending (false). Default true."},
+            "filter": {"type": "string", "description": "Optional QGIS filter expression e.g. \"NAME_EN\" LIKE '%Central%'."}
         },
         "required": ["layer_name"]
     }

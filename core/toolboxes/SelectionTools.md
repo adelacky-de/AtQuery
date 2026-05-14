@@ -177,7 +177,7 @@ else:
 ```json
 {
     "name": "select_features_advanced",
-    "description": "Selects features in a vector layer with advanced options like sorting and limits.",
+    "description": "SELECTION ONLY tool — highlights features in the layer and zooms to them. Call this ONLY when the user explicitly says 'select' with a ranking (e.g. 'select the top 5 largest areas'). Do NOT call this for 'show me', 'display', or 'list' requests — use get_layer_features_sample for those. Do NOT call this together with QgsVectorLayer_selectByExpression in the same turn.",
     "parameters": {
         "type": "object",
         "properties": {
