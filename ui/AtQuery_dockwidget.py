@@ -381,8 +381,10 @@ class AtQueryDockWidget(QtWidgets.QDockWidget):
                     final_messages = payload_messages + [ai_msg] + tool_outputs
                     final_msg = self._get_ai_response(final_messages, forced_tools)
                     content = final_msg.get("content", "Best-match execution completed.")
-                    
-                    # If the forced tool also failed, warn the user
+                    # FIX: If model leaked raw JSON into content, replace with clean message
+                    if content.strip().startswith('{') and '"name"' in content:
+                        content = "Tool executed via force match."
+                    # Warn if any tool returned an error
                     if any("error" in out.get("content", "").lower() for out in tool_outputs):
                         content += "<br><br>⚠️ <b>Warning:</b> The forced tool encountered an error. Check if the layer names or parameters are valid."
                 else:
@@ -548,6 +550,14 @@ class AtQueryDockWidget(QtWidgets.QDockWidget):
         if len(matches) == 1:
             return matches[0]
         elif len(matches) > 1:
+            # FIX: Prefer layers where name ENDS with the search term (original vs derived).
+            # e.g. 'DCD' → prefer '...— DCD' over '...— DCD_clipped' or '...— DCD_selection'
+            suffix_pat = re.compile(
+                r'(?:^|[\s\-\u2014_.])' + re.escape(name.lower()) + r'\s*$'
+            )
+            suffix_matches = [l for l in matches if suffix_pat.search(l.name().lower())]
+            if len(suffix_matches) == 1:
+                return suffix_matches[0]  # Unambiguous suffix match — return silently
             matches.sort(key=lambda l: len(l.name()) - len(name))
             raise Exception(_build_ambiguity_error(name, matches))
         

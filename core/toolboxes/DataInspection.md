@@ -145,11 +145,10 @@ else:
 ```
 - **Implementation**:
 ```python
-from qgis.core import QgsFeatureRequest
+from qgis.core import QgsFeatureRequest, QgsExpression
 layer = self._resolve_layer(args['layer_name'])
 if layer:
     if hasattr(layer, 'getFeatures'):
-        # Clamp limit between 1 and 50 to prevent crashing local LLMs
         limit = min(max(args.get('limit', 5), 1), 50)
         fields = [f.name() for f in layer.fields()]
         
@@ -161,23 +160,31 @@ if layer:
             req.setOrderBy(QgsFeatureRequest.OrderBy([QgsFeatureRequest.OrderByClause(sort_field, args.get('ascending', True))]))
         
         filter_exp = args.get('filter')
+        filter_ok = True
         if filter_exp:
-            req.setFilterExpression(filter_exp)
+            # Validate expression before running to give a clean error
+            exp = QgsExpression(filter_exp)
+            if exp.hasParserError():
+                result = {"error": f"Invalid filter expression: {exp.parserErrorString()}. Use QGIS syntax e.g. \"NAME_EN\" LIKE '%Central%'"}
+                filter_ok = False
+            else:
+                req.setFilterExpression(filter_exp)
         
-        # Build HTML table for premium look and to prevent AI hallucination
-        html = '<table border="1" style="border-collapse: collapse; width: 100%; font-size: 11px;">'
-        html += '<tr style="background-color: #f2f2f2;">' + "".join([f'<th style="padding: 4px;">{f}</th>' for f in fields]) + '</tr>'
-        
-        count = 0
-        for feat in layer.getFeatures(req):
-            html += '<tr>' + "".join([f'<td style="padding: 4px;">{str(feat.attributes()[i])}</td>' for i in range(len(fields))]) + '</tr>'
-            count += 1
-        html += '</table>'
-        
-        if count == 0:
-            result = {"error": "The layer is empty (0 features)."}
-        else:
-            result = {"status": "success", "PRESERVE_AS_HTML": html}
+        if filter_ok:
+            html = '<table border="1" style="border-collapse: collapse; width: 100%; font-size: 11px;">'
+            html += '<tr style="background-color: #f2f2f2;">' + "".join([f'<th style="padding: 4px;">{f}</th>' for f in fields]) + '</tr>'
+            count = 0
+            for feat in layer.getFeatures(req):
+                html += '<tr>' + "".join([f'<td style="padding: 4px;">{str(feat.attributes()[i])}</td>' for i in range(len(fields))]) + '</tr>'
+                count += 1
+            html += '</table>'
+            if count == 0:
+                if filter_exp:
+                    result = {"error": f"No features matched the filter: {filter_exp}. Check field name spelling and value casing."}
+                else:
+                    result = {"error": "The layer is empty (0 features)."}
+            else:
+                result = {"status": "success", "PRESERVE_AS_HTML": html}
     else:
         result = {"error": f"Layer '{layer.name()}' has no attribute table (it may be a raster layer)."}
 else:

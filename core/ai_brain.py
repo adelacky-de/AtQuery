@@ -280,6 +280,9 @@ def get_system_prompt():
 6. For "select features where X" (simple filter) → call QgsVectorLayer_selectByExpression.
 7. For "select top N by field" → call select_features_advanced. Never call it together with selectByExpression.
 8. If user says "this layer" or "current layer" → call get_active_layer first. If user names a layer → use that name directly.
+9. If user says "buffer/clip/process the selected [X]" and X is NOT a known layer name → call get_layers_with_selection to find which layer has the selection, then operate on that layer.
+10. If the query is extremely vague ("do something", "what should I do") with no specific layer or GIS action → respond: "Please provide more specific instructions. What layer or operation did you have in mind?" and do NOT call any tool.
+11. If the user asks a conceptual/advice question ("what is a good buffer distance", "how far should", "what is the best approach") → respond: "This is a planning question. For the GIS operation itself, tell me what layer and distance to use." Do NOT call any tool.
 
 CONTEXT AWARENESS:
 - If the user says "this layer", "current layer" without a name → call get_active_layer first.
