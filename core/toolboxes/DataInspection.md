@@ -20,6 +20,8 @@ Guides the agent through inspecting layer metadata, attribute schemas, and featu
 | "I'll guess the field names based on the layer name." | **NO.** Always call `QgsVectorLayer_fields` first. |
 | "I'll make up sample data if the tool fails." | **NO.** If the tool returns an error, report it. Never hallucinate rows. |
 | "I'll use `get_layer_metadata` to show column values." | **STRICT NO.** `get_layer_metadata` returns NO row data. For any column/value/example request, ALWAYS use `get_layer_features_sample`. |
+| "The user said 'show me records where X', so I'll call selectByExpression." | **STRICT NO.** 'Show me' means DISPLAY. Call `get_layer_features_sample` with the `filter` parameter. `selectByExpression` is for SELECTING features, not displaying them. |
+| "The user asked 'what are the columns', so I'll describe them from memory." | **STRICT NO.** Call `get_layer_features_sample` to show real column names and real values from the layer. |
 
 ## Verification Gates
 - **HTML Presence**: Every data request MUST result in a `PRESERVE_AS_HTML` key.

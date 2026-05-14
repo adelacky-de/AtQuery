@@ -174,8 +174,8 @@ class AtQueryDockWidget(QtWidgets.QDockWidget):
                     tool_was_executed = False
                     break
                     
-                # FIX: Limit long-term memory to last 2 turns to prevent hallucination
-                combined_history = self.conversation_history[-2:] + current_turn_history
+                # FIX: Keep only 1 prior turn to prevent history poisoning (forbidden phrases re-injection)
+                combined_history = self.conversation_history[-1:] + current_turn_history
                 ai_msg = self._get_ai_response(combined_history, active_tools)
                 current_turn_history.append(ai_msg)
 
@@ -251,11 +251,12 @@ class AtQueryDockWidget(QtWidgets.QDockWidget):
             if not tool_was_executed:
                 self._show_fallback_card_in_chat(user_text, current_turn_history, aborted=aborted_due_to_error)
             else:
-                # FIX: Save only clean text to prevent tool JSON logs from confusing the AI
-                final_ai_msg = [m for m in current_turn_history if m["role"] == "assistant" and m.get("content")]
-                if final_ai_msg:
-                    self.conversation_history.append({"role": "user", "content": user_text})
-                    self.conversation_history.append({"role": "assistant", "content": final_ai_msg[-1]["content"]})
+                # FIX: Save only a clean tool-name summary — NOT the verbose AI response.
+                # Saving the full response re-injects forbidden phrases ("Would you like to...?")
+                # into the next turn's context, causing the model to keep producing them.
+                tools_used = ', '.join(gis_tools_called) if gis_tools_called else 'unknown'
+                self.conversation_history.append({"role": "user", "content": user_text})
+                self.conversation_history.append({"role": "assistant", "content": f"Completed using: {tools_used}."})
 
         except Exception as e:
             self.chat_display.append(f"<br><b>Error:</b> {str(e)}")
@@ -427,7 +428,7 @@ class AtQueryDockWidget(QtWidgets.QDockWidget):
             "messages": [{"role": "system", "content": get_system_prompt()}] + sanitized,
             "tools": tools,
             "stream": False,
-            "options": {"temperature": 0.0, "num_predict": 400}
+            "options": {"temperature": 0.0, "num_predict": 800}
         }
         
         resp = requests.post(self.ollama_url, json=payload, timeout=120)
