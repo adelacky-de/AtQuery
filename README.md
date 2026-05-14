@@ -96,7 +96,7 @@ When a tool needs to find a layer by name, the resolution goes through 3 steps:
 
 ## 📖 Prompt Examples
 
-AtQuery supports a wide range of GIS tasks. Most have been tested against DCD and GOVT_PRS layers. You are welcome to report missing tools or request prompt updates.
+AtQuery supports a wide range of GIS tasks. Most have been tested and you are welcome to report missing tools or request prompt updates.
 
 ### 🔍 Project Discovery & Data Inspection
 - *"What layers are currently in my map?"*
