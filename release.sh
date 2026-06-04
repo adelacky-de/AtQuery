@@ -43,5 +43,5 @@ else
 fi
 
 git tag -a "$VERSION" -m "Release $VERSION"
-git push origin production --tags
-echo "✅ Released $VERSION to production"
+git push origin production:main --tags
+echo "✅ Released $VERSION to main"
