@@ -1,0 +1,8 @@
+{
+  "_meta": {
+    "description": "AtQuery Community Toolbox — self-expanding skill registry. New tools are added automatically when a user query has no match in the built-in toolboxes.",
+    "version": "1.0",
+    "notify_email": "adelacky.de@gmail.com"
+  },
+  "tools": []
+}
